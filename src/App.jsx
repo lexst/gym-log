@@ -524,6 +524,57 @@ function Workout({ id, back }) {
 
 // --- history ------------------------------------------------------------------
 
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+// Month grid of training days; the colour shows which Tag it was.
+function Calendar({ ws, go }) {
+  const today = L.todayIso();
+  const [month, setMonth] = useState(today.slice(0, 7));
+  const [y, m] = month.split('-').map(Number);
+  const shift = (n) => {
+    const d = new Date(y, m - 1 + n, 1);
+    setMonth(L.todayIso(d).slice(0, 7));
+  };
+  const dayIndex = Object.fromEntries(days().map((d, i) => [d.id, i]));
+  const byDate = {};
+  for (const w of ws) if (w.date.startsWith(month)) (byDate[w.date] ||= []).push(w);
+  const lead = (new Date(y, m - 1, 1).getDay() + 6) % 7;
+  const count = new Date(y, m, 0).getDate();
+  const cells = [...Array(lead).fill(null), ...Array.from({ length: count }, (_, i) => i + 1)];
+  const total = Object.values(byDate).reduce((n, l) => n + l.length, 0);
+  return (
+    <section className="card cal">
+      <div className="row between">
+        <button className="icon" onClick={() => shift(-1)} aria-label="Vorheriger Monat">‹</button>
+        <div className="big">{MONTHS[m - 1]} {y}</div>
+        <button className="icon" onClick={() => shift(1)} aria-label="Nächster Monat">›</button>
+      </div>
+      <div className="cal-grid">
+        {WEEKDAYS.map((d) => <div key={d} className="cal-wd">{d}</div>)}
+        {cells.map((d, i) => {
+          if (!d) return <div key={i} />;
+          const iso = `${month}-${String(d).padStart(2, '0')}`;
+          const list = byDate[iso];
+          const w = list?.[0];
+          const cls = 'cal-day' + (w ? ` on t${(dayIndex[w.dayId] ?? 0) % 3}` : '') + (iso === today ? ' today' : '');
+          return w ? (
+            <button key={i} className={cls} onClick={() => go('workout', { id: w.id })} aria-label={`${L.fmtDate(iso)}: ${list.map((x) => dayName(x.dayId)).join(', ')}`}>
+              <span>{d}</span>
+              <span className="cal-tag">{list.map((x) => dayName(x.dayId).replace(/^Tag\s*/, 'T')).join('+')}</span>
+            </button>
+          ) : (
+            <div key={i} className={cls}><span>{d}</span></div>
+          );
+        })}
+      </div>
+      <div className="muted small center">
+        {total ? `${total} ${total === 1 ? 'Training' : 'Trainings'} im ${MONTHS[m - 1]}` : `Keine Trainings im ${MONTHS[m - 1]}`}
+      </div>
+    </section>
+  );
+}
+
 function HistoryView({ go }) {
   const all = workouts();
   const ws = all.filter((w) => w.finished).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
@@ -531,6 +582,7 @@ function HistoryView({ go }) {
     <>
       <Header title="Verlauf" />
       <main className="pad">
+        <Calendar ws={all} go={go} />
         {!ws.length && <p className="muted center">Noch keine abgeschlossenen Trainings.</p>}
         {ws.map((w) => (
           <button key={w.id} className="card hist" onClick={() => go('workout', { id: w.id })}>

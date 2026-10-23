@@ -225,3 +225,16 @@ button.card:active { background: var(--card2); }
 .side { display: inline-flex; align-items: center; gap: 4px; }
 .pause { margin-top: 12px; align-items: flex-start; }
 .pause input { flex-shrink: 0; margin-top: 1px; }
+.cal .icon { margin: 0; font-size: 20px; line-height: 1; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 10px 0 8px; }
+.cal-wd { text-align: center; font-size: 11px; color: var(--muted); padding-bottom: 2px; }
+.cal-day {
+  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-radius: 10px; font-size: 14px; border: 1px solid transparent; background: none; padding: 0; min-width: 0;
+}
+.cal-day.today { border-color: var(--muted); }
+.cal-day.on { font-weight: 700; }
+.cal-day.t0 { background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--accent); }
+.cal-day.t1 { background: color-mix(in srgb, var(--blue) 26%, transparent); color: var(--blue); }
+.cal-day.t2 { background: color-mix(in srgb, var(--good) 26%, transparent); color: var(--good); }
+.cal-tag { font-size: 10px; font-weight: 600; line-height: 1; margin-top: 1px; opacity: 0.85; }
