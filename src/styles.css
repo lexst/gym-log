@@ -153,6 +153,8 @@ button.card:active { background: var(--card2); }
 .res.up { background: color-mix(in srgb, var(--good) 20%, transparent); color: var(--good); }
 .res.same { background: var(--card2); color: var(--muted); }
 .res.down { background: color-mix(in srgb, var(--bad) 20%, transparent); color: var(--bad); }
+.res.down.soft { background: var(--card2); color: var(--muted); }
+.res.top { width: 28px; background: var(--good); color: #fff; font-size: 15px; }
 .res.new { background: var(--card2); color: var(--blue); }
 .pr { font-size: 11px; font-weight: 800; padding: 3px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
 
@@ -221,3 +223,5 @@ button.card:active { background: var(--card2); }
   background: linear-gradient(transparent, var(--bg) 30%);
 }
 .side { display: inline-flex; align-items: center; gap: 4px; }
+.pause { margin-top: 12px; align-items: flex-start; }
+.pause input { flex-shrink: 0; margin-top: 1px; }

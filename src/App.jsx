@@ -127,12 +127,18 @@ function Header({ title, onBack, right }) {
   );
 }
 
-function ResultBadge({ r, pr }) {
+// soft: a workout after a break or illness shows declines in grey, not red.
+function ResultBadge({ r, pr, top, soft }) {
   if (!r) return null;
   const [sym, cls] = RESULT[r];
   return (
     <span className="badges">
-      <span className={'res ' + cls} title={RESULT_TITLE[r]}>{sym}</span>
+      {top && (
+        <span className="res top" title="Oberes Ende in allen Sätzen erreicht">
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </span>
+      )}
+      <span className={'res ' + cls + (soft && r === 'down' ? ' soft' : '')} title={RESULT_TITLE[r]}>{sym}</span>
       {pr && <span className="pr" title="Persönlicher Rekord">PR</span>}
     </span>
   );
@@ -281,7 +287,7 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
           <div className="muted small">{exGroup(entry.exId)}</div>
           <div className="big">{exName(entry.exId)}</div>
         </div>
-        <ResultBadge r={r} pr={pr} />
+        <ResultBadge r={r} pr={pr} top={r && L.topReached(entry)} soft={w.pause} />
       </div>
       <div className="meta small">
         <span className="chip">{target}</span>
@@ -352,7 +358,7 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
             </>
           )}
           {rep != null && entry.repMax && (
-            <span className={'small ' + (rep >= entry.repMax ? 'good' : rep < entry.repMin ? 'bad' : 'muted')}>
+            <span className={'small ' + (rep >= entry.repMax ? 'good' : rep < entry.repMin && !w.pause ? 'bad' : 'muted')}>
               {rep >= entry.repMax ? 'oben' : rep < entry.repMin ? 'zu wenig' : ''}
             </span>
           )}
@@ -490,6 +496,13 @@ function Workout({ id, back }) {
         ))}
         <button className="btn ghost" onClick={() => setAdding(true)}>+ Übung</button>
         <textarea className="note big-note" rows={2} placeholder="Notiz zum Training" value={w.note || ''} onChange={(e) => save({ note: e.target.value })} />
+        <label className="check pause">
+          <input type="checkbox" checked={!!w.pause} onChange={(e) => save({ pause: e.target.checked })} />
+          <span>
+            Nach Pause oder Krankheit
+            <span className="muted small"> – Rückgänge grau statt rot</span>
+          </span>
+        </label>
         {!w.finished ? (
           <button className="btn primary" onClick={finish}>
             Training beenden ({doneCount}/{w.entries.length})
@@ -518,6 +531,7 @@ function HistoryView({ go }) {
           <button key={w.id} className="card hist" onClick={() => go('workout', { id: w.id })}>
             <div className="row between">
               <div className="big">{dayName(w.dayId)} · {L.fmtDate(w.date)}</div>
+              {w.pause && <span className="chip">nach Pause</span>}
             </div>
             {w.entries.filter(L.hasData).map((e, i) => {
               const prev = L.previous(all, e.exId, w)?.entry;
@@ -525,7 +539,7 @@ function HistoryView({ go }) {
                 <div key={i} className="hist-line small">
                   <span className="hist-name">{exName(e.exId)}</span>
                   <span className="muted">{L.fmtNum(e.weight)}×{L.doneReps(e).join('/')}</span>
-                  <ResultBadge r={L.compare(e, prev)} pr={L.isPr(all, e, w)} />
+                  <ResultBadge r={L.compare(e, prev)} pr={L.isPr(all, e, w)} top={L.topReached(e)} soft={w.pause} />
                 </div>
               );
             })}
@@ -653,7 +667,7 @@ function ExerciseProgress({ exId, back, go }) {
               <div className="hist-line">
                 <span className="hist-name">{L.fmtDate(x.date)}</span>
                 <span>{L.fmtNum(x.entry.weight)} kg × {L.doneReps(x.entry).join('/')}</span>
-                <ResultBadge r={L.compare(x.entry, prev)} />
+                <ResultBadge r={L.compare(x.entry, prev)} top={L.topReached(x.entry)} soft={store.get('workout', x.workoutId)?.pause} />
               </div>
               {x.entry.note && <div className="muted small hist-note">{x.entry.note}</div>}
             </button>
