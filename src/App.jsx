@@ -691,7 +691,7 @@ function SyncBox() {
     };
     const signUp = async () => {
       setMsg('');
-      const { error, data } = await supabase.auth.signUp({ email, password: pw });
+      const { error, data } = await supabase.auth.signUp({ email, password: pw, options: { emailRedirectTo: location.origin + location.pathname } });
       if (error) setMsg(error.message);
       else if (!data.session) setMsg('Проверьте почту и подтвердите адрес, затем войдите.');
     };
