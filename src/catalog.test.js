@@ -25,3 +25,10 @@ test('Notion days refer to known exercises', async () => {
     assert.equal(w.entries.length, items.length);
   }
 });
+
+test('older Notion sessions have one result per planned exercise', async () => {
+  const { NOTION_OLDER, NOTION_DAYS } = await import('./catalog.js');
+  const ids = [...NOTION_OLDER, ...NOTION_DAYS.map(([, , w]) => w)].map((w) => w.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const w of NOTION_OLDER) for (const e of w.entries) assert.ok(e.weight > 0 && e.reps.length === e.sets, w.id);
+});

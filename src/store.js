@@ -3,7 +3,7 @@
 // remote ones by last-write-wins on updatedAt.
 import { useSyncExternalStore } from 'react';
 import { seedDocs } from './seed.js';
-import { CATALOG, SEED_FIXES, slug, NOTION_EXTRA_EXERCISES, NOTION_DAYS } from './catalog.js';
+import { CATALOG, SEED_FIXES, slug, NOTION_EXTRA_EXERCISES, NOTION_DAYS, NOTION_OLDER } from './catalog.js';
 
 const KEY = 'gymlog:v1';
 const listeners = new Set();
@@ -89,7 +89,7 @@ export function ensureSeed() {
 // updatedAt + 1, so a newer synced edit of the same doc still wins.
 export function ensureCatalog() {
   const v = state.catalog || 0;
-  if (v >= 2) return;
+  if (v >= 3) return;
   if (v < 1) {
     for (const [id, old, next] of SEED_FIXES) {
       const d = state.docs.exercise?.[id];
@@ -107,14 +107,17 @@ export function ensureCatalog() {
       }
     }
   }
-  // Tag 2 and 3 from Notion: fill a day only if it is still empty.
-  for (const e of NOTION_EXTRA_EXERCISES) if (!state.docs.exercise?.[e.id]) write('exercise', e, 1);
-  for (const [dayId, items, workout] of NOTION_DAYS) {
-    const d = state.docs.day?.[dayId];
-    if (d && !d.deleted && !d.items.length) write('day', { ...d, items }, (d.updatedAt || 0) + 1);
-    if (!state.docs.workout?.[workout.id]) write('workout', workout, 1);
+  if (v < 2) {
+    // Tag 2 and 3 from Notion: fill a day only if it is still empty.
+    for (const e of NOTION_EXTRA_EXERCISES) if (!state.docs.exercise?.[e.id]) write('exercise', e, 1);
+    for (const [dayId, items, workout] of NOTION_DAYS) {
+      const d = state.docs.day?.[dayId];
+      if (d && !d.deleted && !d.items.length) write('day', { ...d, items }, (d.updatedAt || 0) + 1);
+      if (!state.docs.workout?.[workout.id]) write('workout', workout, 1);
+    }
   }
-  state.catalog = 2;
+  for (const w of NOTION_OLDER) if (!state.docs.workout?.[w.id]) write('workout', w, 1);
+  state.catalog = 3;
   emit();
 }
 
