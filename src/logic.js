@@ -28,6 +28,12 @@ export function fmtNum(n) {
   return String(Math.round(n * 100) / 100).replace('.', ',');
 }
 
+// Rest timer display: 95000 -> "1:35".
+export function fmtClock(ms) {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+
 // Warm-up set is about half the working weight, rounded down
 // (65 -> 30, 120 -> 60). Light weights round down to whole kilos.
 export function warmupWeight(w) {

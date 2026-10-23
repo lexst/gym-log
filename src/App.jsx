@@ -495,7 +495,7 @@ function Workout({ id, back }) {
         onBack={back}
         right={<input type="date" className="date" value={w.date} onChange={(e) => e.target.value && save({ date: e.target.value })} />}
       />
-      <main className="pad">
+      <main className={'pad' + (w.finished ? '' : ' with-timer')}>
         {w.entries.map((e, i) => (
           <EntryCard key={i} w={w} entry={e} index={i} update={update} removeEntry={removeEntry} ws={ws} />
         ))}
@@ -517,8 +517,99 @@ function Workout({ id, back }) {
         )}
         <button className="link danger center-block" onClick={del}>Training löschen</button>
       </main>
+      {!w.finished && <RestTimer />}
       {adding && <AddExercise onAdd={addEntry} onClose={() => setAdding(false)} />}
     </>
+  );
+}
+
+// --- rest timer -----------------------------------------------------------------
+// Started by hand and counts up, so a longer break (changing weights) needs
+// no stopping. Kept per device; times come from timestamps, so the clock is
+// right again after the app was in the background.
+
+const TIMER_KEY = 'gymlog:timer';
+const loadTimer = () => {
+  try {
+    return JSON.parse(localStorage.getItem(TIMER_KEY));
+  } catch {
+    return null;
+  }
+};
+const saveTimer = (t) => {
+  try {
+    if (t) localStorage.setItem(TIMER_KEY, JSON.stringify(t));
+    else localStorage.removeItem(TIMER_KEY);
+  } catch {}
+};
+
+let audio;
+function beep() {
+  try {
+    if (!audio) return;
+    for (const [at, f] of [[0, 880], [0.25, 880], [0.5, 1175]]) {
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.25, audio.currentTime + at);
+      g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + at + 0.2);
+      o.connect(g).connect(audio.destination);
+      o.start(audio.currentTime + at);
+      o.stop(audio.currentTime + at + 0.2);
+    }
+    navigator.vibrate?.([200, 100, 200]);
+  } catch {}
+}
+
+function RestTimer() {
+  const [t, setT] = useState(loadTimer);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!t) return;
+    const id = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(id);
+  }, [t]);
+  const elapsed = t ? Date.now() - t.start : 0;
+  const done = t && elapsed >= t.target;
+  useEffect(() => {
+    if (done && !t.beeped) {
+      beep();
+      const next = { ...t, beeped: true };
+      saveTimer(next);
+      setT(next);
+    }
+  }, [done]);
+  const update = (next) => {
+    saveTimer(next);
+    setT(next);
+  };
+  const start = (sec) => {
+    try {
+      audio ||= new (window.AudioContext || window.webkitAudioContext)();
+      audio.resume?.();
+    } catch {}
+    update({ start: Date.now(), target: sec * 1000 });
+  };
+
+  if (!t) {
+    return (
+      <div className="timer">
+        <span className="muted small">Pause</span>
+        <button className="chip-btn" onClick={() => start(90)}>1:30</button>
+        <button className="chip-btn" onClick={() => start(180)}>3:00</button>
+      </div>
+    );
+  }
+  return (
+    <div className={'timer running' + (done ? ' done' : '')}>
+      <div className="timer-clock">
+        <span className="timer-time">{L.fmtClock(elapsed)}</span>
+        <span className="small">{done ? 'Pause vorbei' : `von ${L.fmtClock(t.target)}`}</span>
+      </div>
+      <div className="timer-bar"><i style={{ width: `${Math.min(100, (elapsed / t.target) * 100)}%` }} /></div>
+      <button className="chip-btn" onClick={() => update({ ...t, target: t.target + 30000, beeped: elapsed >= t.target + 30000 })}>+30 s</button>
+      <button className="chip-btn" onClick={() => update(null)}>Stopp</button>
+    </div>
   );
 }
 

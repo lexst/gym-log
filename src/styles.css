@@ -238,3 +238,19 @@ button.card:active { background: var(--card2); }
 .cal-day.t1 { background: color-mix(in srgb, var(--blue) 26%, transparent); color: var(--blue); }
 .cal-day.t2 { background: color-mix(in srgb, var(--good) 26%, transparent); color: var(--good); }
 .cal-tag { font-size: 10px; font-weight: 600; line-height: 1; margin-top: 1px; opacity: 0.85; }
+.with-timer { padding-bottom: 96px; }
+.timer {
+  position: fixed; left: 0; right: 0; margin: 0 auto; max-width: 640px; z-index: 9;
+  bottom: calc(60px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px;
+  background: color-mix(in srgb, var(--card) 96%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line);
+}
+.timer > .muted { margin-right: auto; }
+.timer-clock { display: flex; flex-direction: column; line-height: 1.1; min-width: 72px; }
+.timer-time { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.timer-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--card2); overflow: hidden; }
+.timer-bar i { display: block; height: 100%; background: var(--accent); transition: width 0.5s linear; }
+.timer.done .timer-time, .timer.done .small { color: var(--good); }
+.timer.done .timer-bar i { background: var(--good); }
