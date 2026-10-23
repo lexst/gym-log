@@ -134,7 +134,7 @@ function ResultBadge({ r, pr, top, soft }) {
   return (
     <span className="badges">
       {top && (
-        <span className="res top" title="Oberes Ende in allen Sätzen erreicht">
+        <span className="res reached" title="Oberes Ende in allen Sätzen erreicht">
           <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </span>
       )}
