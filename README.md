@@ -13,7 +13,7 @@ npm test         # тесты логики
 npm run build    # сборка в dist/
 ```
 
-Для синхронизации создайте `.env.local`:
+Адрес и публичный ключ Supabase прописаны в `src/config.js`. Чтобы подключить другой проект, создайте `.env.local`:
 
 ```
 VITE_SUPABASE_URL=https://xxxx.supabase.co
@@ -24,10 +24,9 @@ VITE_SUPABASE_ANON_KEY=...
 
 1. Создать проект на supabase.com.
 2. SQL Editor → выполнить `supabase/schema.sql`.
-3. Authentication → URL Configuration: добавить адрес сайта на GitHub Pages.
+3. Authentication → URL Configuration: Site URL = `https://lexst.github.io/gym-log/`.
 
 ## Публикация
 
 GitHub Actions (`.github/workflows/pages.yml`) собирает и выкладывает приложение на
-GitHub Pages при каждом пуше в `main`. В Settings → Pages выбрать Source: GitHub Actions,
-в Settings → Secrets and variables → Actions → Variables задать `SUPABASE_URL` и `SUPABASE_ANON_KEY`.
+GitHub Pages при каждом пуше в `main`. В Settings → Pages выбрать Source: GitHub Actions.
