@@ -9,20 +9,49 @@ import { supabase, syncNow, onStatus, status as initialStatus } from './sync.js'
 const days = () => store.all('day').sort((a, b) => (a.order || 0) - (b.order || 0));
 const exercises = () => store.all('exercise').sort((a, b) => a.name.localeCompare(b.name));
 const workouts = () => store.all('workout');
-const exName = (id) => store.get('exercise', id)?.name || 'Упражнение';
+const exName = (id) => store.get('exercise', id)?.name || 'Übung';
 const exGroup = (id) => store.get('exercise', id)?.group || '';
 const dayName = (id) => store.get('day', id)?.name || '';
 const activeWorkout = () => workouts().find((w) => !w.finished);
+const NO_GROUP = 'Ohne Gruppe';
+const groupOf = (e) => e.group?.trim() || NO_GROUP;
+const groups = () => [...new Set(exercises().map(groupOf))].sort((a, b) => (a === NO_GROUP ? 1 : b === NO_GROUP ? -1 : a.localeCompare(b)));
+
+// [[group, items]] in group order; key(item) gives the exercise.
+function byGroup(items, key = (x) => x) {
+  const map = new Map();
+  for (const it of items) {
+    const g = groupOf(key(it));
+    if (!map.has(g)) map.set(g, []);
+    map.get(g).push(it);
+  }
+  return groups().filter((g) => map.has(g)).map((g) => [g, map.get(g)]);
+}
 
 const RESULT = { up: ['↑', 'up'], same: ['=', 'same'], down: ['↓', 'down'], new: ['•', 'new'] };
+const RESULT_TITLE = { up: 'Fortschritt', same: 'Wie letztes Mal', down: 'Schlechter', new: 'Erstes Mal' };
+
+function agoText(iso) {
+  const n = L.daysAgo(iso);
+  return n === 0 ? 'heute' : n === 1 ? 'gestern' : `vor ${n} Tagen`;
+}
+
+function targetText(t) {
+  if (!t.repMin) return `${t.sets} Sätze`;
+  return `${t.sets}×${t.repMin}${t.repMax && t.repMax !== t.repMin ? '–' + t.repMax : ''}`;
+}
+
+// What the next session of a planned exercise starts with.
+function plannedStart(it, ws) {
+  const prev = L.previous(ws, it.exId, { date: '9999-12-31' });
+  const sug = L.suggest(it, prev?.entry, it.step);
+  return { prev, weight: sug?.weight ?? null, up: !!sug?.up };
+}
 
 function startWorkout(day) {
   const ws = workouts();
-  const date = L.todayIso();
   const entries = day.items.map((it) => {
-    const prev = L.previous(ws, it.exId, { date: '9999-12-31' });
-    const sug = L.suggest(it, prev?.entry, it.step);
-    const weight = sug?.weight ?? null;
+    const { weight } = plannedStart(it, ws);
     return {
       exId: it.exId,
       sets: it.sets,
@@ -35,7 +64,7 @@ function startWorkout(day) {
       note: '',
     };
   });
-  return store.put('workout', { id: uid(), dayId: day.id, date, entries, note: '', finished: false, startedAt: Date.now() });
+  return store.put('workout', { id: uid(), dayId: day.id, date: L.todayIso(), entries, note: '', finished: false, startedAt: Date.now() });
 }
 
 // --- small inputs -------------------------------------------------------------
@@ -74,9 +103,9 @@ function Stepper({ value, onChange, step = 2.5, placeholder, ariaLabel }) {
   const bump = (d) => onChange(Math.max(0, Math.round(((value || 0) + d) * 100) / 100));
   return (
     <div className="stepper">
-      <button type="button" onClick={() => bump(-step)} aria-label="Меньше">−</button>
+      <button type="button" onClick={() => bump(-step)} aria-label="Weniger">−</button>
       <NumField value={value} onChange={onChange} placeholder={placeholder} ariaLabel={ariaLabel} />
-      <button type="button" onClick={() => bump(step)} aria-label="Больше">+</button>
+      <button type="button" onClick={() => bump(step)} aria-label="Mehr">+</button>
     </div>
   );
 }
@@ -85,7 +114,7 @@ function Header({ title, onBack, right }) {
   return (
     <header className="top">
       {onBack ? (
-        <button className="back" onClick={onBack} aria-label="Назад">‹</button>
+        <button className="back" onClick={onBack} aria-label="Zurück">‹</button>
       ) : (
         <span className="back-space" />
       )}
@@ -100,8 +129,8 @@ function ResultBadge({ r, pr }) {
   const [sym, cls] = RESULT[r];
   return (
     <span className="badges">
-      <span className={'res ' + cls} title={{ up: 'Прогресс', same: 'Как в прошлый раз', down: 'Хуже', new: 'Первый раз' }[r]}>{sym}</span>
-      {pr && <span className="pr" title="Личный рекорд">PR</span>}
+      <span className={'res ' + cls} title={RESULT_TITLE[r]}>{sym}</span>
+      {pr && <span className="pr" title="Persönlicher Rekord">PR</span>}
     </span>
   );
 }
@@ -116,38 +145,92 @@ function Home({ go }) {
 
   return (
     <>
-      <Header title="Тренировка" />
+      <Header title="Training" />
       <main className="pad">
         {active && (
           <button className="card active-card" onClick={() => go('workout', { id: active.id })}>
-            <div className="muted small">Идёт тренировка</div>
+            <div className="muted small">Training läuft</div>
             <div className="big">{dayName(active.dayId)} · {L.fmtDate(active.date)}</div>
-            <div className="small">Продолжить ›</div>
+            <div className="small">Weiter ›</div>
           </button>
         )}
-        <h2>Начать</h2>
+        <h2>Trainingstage</h2>
         {ds.map((d) => {
           const last = ws.filter((w) => w.finished && w.dayId === d.id).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
-          const ago = last ? L.daysAgo(last.date) : null;
           return (
             <button
               key={d.id}
               className={'card day-card' + (d.id === nextId && !active ? ' next' : '')}
-              disabled={!!active || !d.items.length}
-              onClick={() => go('workout', { id: startWorkout(d).id })}
+              onClick={() => go('preview', { dayId: d.id })}
             >
               <div className="row between">
                 <div className="big">{d.name}</div>
-                {d.id === nextId && !active && <span className="chip">следующая</span>}
+                {d.id === nextId && !active && <span className="chip">als Nächstes</span>}
               </div>
               <div className="muted small">
-                {d.items.length ? `${d.items.length} упр. · ` : 'Нет упражнений — добавьте в «Программа» · '}
-                {last ? `последний раз ${L.fmtDate(last.date)}${ago === 0 ? ' (сегодня)' : ago === 1 ? ' (вчера)' : ` (${ago} дн. назад)`}` : 'ещё не было'}
+                {d.items.length ? `${d.items.length} Übungen · ` : 'Keine Übungen · '}
+                {last ? `zuletzt ${L.fmtDate(last.date)} (${agoText(last.date)})` : 'noch nie'}
               </div>
             </button>
           );
         })}
-        {active && <p className="muted small center">Сначала завершите текущую тренировку.</p>}
+      </main>
+    </>
+  );
+}
+
+// --- day preview --------------------------------------------------------------
+
+function DayPreview({ dayId, back, go, replace }) {
+  const d = store.get('day', dayId);
+  if (!d) return <><Header title="Tag" onBack={back} /></>;
+  const ws = workouts();
+  const active = activeWorkout();
+  const start = () => replace('workout', { id: startWorkout(d).id });
+
+  return (
+    <>
+      <Header title={d.name} onBack={back} />
+      <main className="pad">
+        {!d.items.length && <p className="muted center">Noch keine Übungen für diesen Tag.</p>}
+        {d.items.map((it, i) => {
+          const { prev, weight, up } = plannedStart(it, ws);
+          return (
+            <section className="card preview" key={i}>
+              <div className="muted small">{exGroup(it.exId)}</div>
+              <div className="row between">
+                <div className="big">{exName(it.exId)}</div>
+                <span className="chip">{targetText(it)}</span>
+              </div>
+              <div className="small muted">
+                {prev
+                  ? `Letztes Mal ${L.fmtDate(prev.date, false)}: ${L.fmtNum(prev.entry.weight)} kg × ${L.doneReps(prev.entry).join('/')}`
+                  : 'Erstes Mal'}
+              </div>
+              {weight != null && (
+                <div className={'small ' + (up ? 'good' : '')}>
+                  Heute: {L.fmtNum(weight)} kg{up ? ' ↑' : ''}
+                  {it.warmup ? ` · Aufwärmen ${L.fmtNum(L.warmupWeight(weight))} kg` : ''}
+                </div>
+              )}
+            </section>
+          );
+        })}
+        <button className="link center-block" onClick={() => go('day', { dayId: d.id })}>Plan bearbeiten</button>
+        <div className="cta">
+          {active ? (
+            <>
+              <p className="muted small center">Beende zuerst das laufende Training ({dayName(active.dayId)}).</p>
+              <button className="btn primary" onClick={() => replace('workout', { id: active.id })}>
+                Laufendes Training öffnen
+              </button>
+            </>
+          ) : (
+            <button className="btn primary" disabled={!d.items.length} onClick={start}>
+              Training starten
+            </button>
+          )}
+        </div>
       </main>
     </>
   );
@@ -166,7 +249,7 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
     reps[i] = v;
     set({ reps });
   };
-  const target = entry.repMin ? `${entry.sets}×${entry.repMin}${entry.repMax && entry.repMax !== entry.repMin ? '–' + entry.repMax : ''}` : `${entry.reps.length} подх.`;
+  const target = entry.repMin ? targetText(entry) : `${entry.reps.length} Sätze`;
 
   return (
     <section className="card entry">
@@ -181,36 +264,36 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
         <span className="chip">{target}</span>
         {prev ? (
           <span className="muted">
-            Прошлый раз: {L.fmtNum(prev.weight)} кг × {L.doneReps(prev).join('/')}
+            Letztes Mal: {L.fmtNum(prev.weight)} kg × {L.doneReps(prev).join('/')}
           </span>
         ) : (
-          <span className="muted">Первый раз</span>
+          <span className="muted">Erstes Mal</span>
         )}
       </div>
       {sug?.up && entry.weight !== sug.weight && !w.finished && (
         <button className="hint" onClick={() => set({ weight: sug.weight })}>
-          В прошлый раз верх диапазона — попробовать {L.fmtNum(sug.weight)} кг?
+          Letztes Mal oberes Ende erreicht – {L.fmtNum(sug.weight)} kg versuchen?
         </button>
       )}
       {sug?.up && entry.weight === sug.weight && !L.hasData(entry) && (
-        <div className="hint ok">↑ Вес повышен: в прошлый раз вы дошли до верха диапазона</div>
+        <div className="hint ok">↑ Gewicht erhöht: letztes Mal oberes Ende erreicht</div>
       )}
 
       <div className="field">
-        <label>Вес, кг</label>
-        <Stepper value={entry.weight} step={entry.step || 2.5} onChange={(v) => set({ weight: v })} ariaLabel="Рабочий вес" />
+        <label>Gewicht, kg</label>
+        <Stepper value={entry.weight} step={entry.step || 2.5} onChange={(v) => set({ weight: v })} ariaLabel="Arbeitsgewicht" />
       </div>
 
       {entry.warmup && (
         <div className="set-row warm">
-          <span className="set-label">Разминка</span>
-          <NumField className="w-sm" value={entry.warmup.weight} onChange={(v) => set({ warmup: { ...entry.warmup, weight: v } })} ariaLabel="Вес разминки" />
-          <span className="muted small">кг ×</span>
-          <NumField className="w-sm" value={entry.warmup.reps} placeholder="—" onChange={(v) => set({ warmup: { ...entry.warmup, reps: v } })} ariaLabel="Повторы разминки" />
+          <span className="set-label">Aufwärmen</span>
+          <NumField className="w-sm" value={entry.warmup.weight} onChange={(v) => set({ warmup: { ...entry.warmup, weight: v } })} ariaLabel="Aufwärmgewicht" />
+          <span className="muted small">kg ×</span>
+          <NumField className="w-sm" value={entry.warmup.reps} placeholder="—" onChange={(v) => set({ warmup: { ...entry.warmup, reps: v } })} ariaLabel="Aufwärm-Wiederholungen" />
           <button
             className={'tick' + (entry.warmup.done ? ' on' : '')}
             onClick={() => set({ warmup: { ...entry.warmup, done: !entry.warmup.done } })}
-            aria-label="Разминка сделана"
+            aria-label="Aufwärmen erledigt"
           >
             ✓
           </button>
@@ -219,40 +302,40 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
 
       {entry.reps.map((rep, i) => (
         <div className="set-row" key={i}>
-          <span className="set-label">Подход {i + 1}</span>
+          <span className="set-label">Satz {i + 1}</span>
           <NumField
             className="w-md"
             value={rep}
             placeholder={prev?.reps?.[i] != null ? String(prev.reps[i]) : '—'}
             onChange={(v) => setRep(i, v)}
-            ariaLabel={`Повторы, подход ${i + 1}`}
+            ariaLabel={`Wiederholungen, Satz ${i + 1}`}
           />
-          <span className="muted small">повт.</span>
+          <span className="muted small">Wdh.</span>
           {rep != null && entry.repMax && (
             <span className={'small ' + (rep >= entry.repMax ? 'good' : rep < entry.repMin ? 'bad' : 'muted')}>
-              {rep >= entry.repMax ? 'верх' : rep < entry.repMin ? 'ниже' : ''}
+              {rep >= entry.repMax ? 'oben' : rep < entry.repMin ? 'zu wenig' : ''}
             </span>
           )}
         </div>
       ))}
       <div className="row gap">
-        <button className="link small" onClick={() => set({ reps: [...entry.reps, null] })}>+ подход</button>
+        <button className="link small" onClick={() => set({ reps: [...entry.reps, null] })}>+ Satz</button>
         {entry.reps.length > 1 && (
-          <button className="link small" onClick={() => set({ reps: entry.reps.slice(0, -1) })}>− подход</button>
+          <button className="link small" onClick={() => set({ reps: entry.reps.slice(0, -1) })}>− Satz</button>
         )}
         {!entry.warmup && (
           <button className="link small" onClick={() => set({ warmup: { weight: L.warmupWeight(entry.weight), reps: null, done: false } })}>
-            + разминка
+            + Aufwärmen
           </button>
         )}
         {entry.extra && (
-          <button className="link small danger" onClick={() => removeEntry(index)}>убрать</button>
+          <button className="link small danger" onClick={() => removeEntry(index)}>entfernen</button>
         )}
       </div>
       <textarea
         className="note"
         rows={1}
-        placeholder="Заметка"
+        placeholder="Notiz"
         value={entry.note || ''}
         onChange={(e) => set({ note: e.target.value })}
       />
@@ -260,31 +343,45 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
   );
 }
 
+// Pick an exercise: first a muscle group, then the exercise; search covers all.
 function AddExercise({ onAdd, onClose }) {
   const [q, setQ] = useState('');
-  const list = exercises().filter((e) => (e.name + ' ' + e.group).toLowerCase().includes(q.toLowerCase()));
+  const [group, setGroup] = useState(null);
+  const query = q.trim().toLowerCase();
+  const list = exercises().filter(
+    (e) => (!group || groupOf(e) === group) && (!query || (e.name + ' ' + e.group).toLowerCase().includes(query)),
+  );
   const create = () => {
-    const e = store.put('exercise', { id: uid(), name: q.trim(), group: '' });
+    const e = store.put('exercise', { id: uid(), name: q.trim(), group: group && group !== NO_GROUP ? group : '' });
     onAdd(e.id);
   };
   return (
     <div className="sheet" onClick={onClose}>
       <div className="sheet-body" onClick={(e) => e.stopPropagation()}>
         <div className="row between">
-          <h2>Добавить упражнение</h2>
-          <button className="link" onClick={onClose}>Закрыть</button>
+          <h2>Übung hinzufügen</h2>
+          <button className="link" onClick={onClose}>Schließen</button>
         </div>
-        <input className="text" autoFocus placeholder="Поиск или новое название" value={q} onChange={(e) => setQ(e.target.value)} />
-        <div className="list">
-          {list.map((e) => (
-            <button key={e.id} className="list-item" onClick={() => onAdd(e.id)}>
-              <div>{e.name}</div>
-              <div className="muted small">{e.group}</div>
-            </button>
+        <input className="text" placeholder="Suchen oder neuer Name" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="chips">
+          <button className={'chip-btn' + (!group ? ' on' : '')} onClick={() => setGroup(null)}>Alle</button>
+          {groups().map((g) => (
+            <button key={g} className={'chip-btn' + (group === g ? ' on' : '')} onClick={() => setGroup(g)}>{g}</button>
           ))}
-          {q.trim() && !list.some((e) => e.name.toLowerCase() === q.trim().toLowerCase()) && (
+        </div>
+        <div className="list">
+          {byGroup(list).map(([g, items]) => (
+            <div key={g}>
+              {!group && <div className="list-head">{g}</div>}
+              {items.map((e) => (
+                <button key={e.id} className="list-item" onClick={() => onAdd(e.id)}>{e.name}</button>
+              ))}
+            </div>
+          ))}
+          {!list.length && !q.trim() && <p className="muted small">Keine Übungen in dieser Gruppe.</p>}
+          {q.trim() && !exercises().some((e) => e.name.toLowerCase() === query) && (
             <button className="list-item" onClick={create}>
-              + Новое: «{q.trim()}»
+              + Neu: „{q.trim()}“{group && group !== NO_GROUP ? ` in ${group}` : ''}
             </button>
           )}
         </div>
@@ -296,7 +393,7 @@ function AddExercise({ onAdd, onClose }) {
 function Workout({ id, back }) {
   const w = store.get('workout', id);
   const [adding, setAdding] = useState(false);
-  if (!w) return <><Header title="Тренировка" onBack={back} /><main className="pad muted">Тренировка удалена.</main></>;
+  if (!w) return <><Header title="Training" onBack={back} /><main className="pad muted">Training gelöscht.</main></>;
   const ws = workouts();
   const save = (patch) => store.put('workout', { ...w, ...patch });
   const update = (i, entry) => {
@@ -331,7 +428,7 @@ function Workout({ id, back }) {
     back();
   };
   const del = () => {
-    if (confirm('Удалить эту тренировку?')) {
+    if (confirm('Dieses Training löschen?')) {
       store.remove('workout', w.id);
       back();
     }
@@ -349,16 +446,16 @@ function Workout({ id, back }) {
         {w.entries.map((e, i) => (
           <EntryCard key={i} w={w} entry={e} index={i} update={update} removeEntry={removeEntry} ws={ws} />
         ))}
-        <button className="btn ghost" onClick={() => setAdding(true)}>+ Упражнение</button>
-        <textarea className="note big-note" rows={2} placeholder="Заметка к тренировке" value={w.note || ''} onChange={(e) => save({ note: e.target.value })} />
+        <button className="btn ghost" onClick={() => setAdding(true)}>+ Übung</button>
+        <textarea className="note big-note" rows={2} placeholder="Notiz zum Training" value={w.note || ''} onChange={(e) => save({ note: e.target.value })} />
         {!w.finished ? (
           <button className="btn primary" onClick={finish}>
-            Завершить тренировку ({doneCount}/{w.entries.length})
+            Training beenden ({doneCount}/{w.entries.length})
           </button>
         ) : (
-          <button className="btn" onClick={() => save({ finished: false })}>Открыть снова</button>
+          <button className="btn" onClick={() => save({ finished: false })}>Wieder öffnen</button>
         )}
-        <button className="link danger center-block" onClick={del}>Удалить тренировку</button>
+        <button className="link danger center-block" onClick={del}>Training löschen</button>
       </main>
       {adding && <AddExercise onAdd={addEntry} onClose={() => setAdding(false)} />}
     </>
@@ -368,24 +465,25 @@ function Workout({ id, back }) {
 // --- history ------------------------------------------------------------------
 
 function HistoryView({ go }) {
-  const ws = workouts().filter((w) => w.finished).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const all = workouts();
+  const ws = all.filter((w) => w.finished).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   return (
     <>
-      <Header title="История" />
+      <Header title="Verlauf" />
       <main className="pad">
-        {!ws.length && <p className="muted center">Пока нет завершённых тренировок.</p>}
+        {!ws.length && <p className="muted center">Noch keine abgeschlossenen Trainings.</p>}
         {ws.map((w) => (
           <button key={w.id} className="card hist" onClick={() => go('workout', { id: w.id })}>
             <div className="row between">
               <div className="big">{dayName(w.dayId)} · {L.fmtDate(w.date)}</div>
             </div>
             {w.entries.filter(L.hasData).map((e, i) => {
-              const prev = L.previous(workouts(), e.exId, w)?.entry;
+              const prev = L.previous(all, e.exId, w)?.entry;
               return (
                 <div key={i} className="hist-line small">
                   <span className="hist-name">{exName(e.exId)}</span>
                   <span className="muted">{L.fmtNum(e.weight)}×{L.doneReps(e).join('/')}</span>
-                  <ResultBadge r={L.compare(e, prev)} pr={L.isPr(workouts(), e, w)} />
+                  <ResultBadge r={L.compare(e, prev)} pr={L.isPr(all, e, w)} />
                 </div>
               );
             })}
@@ -401,7 +499,7 @@ function HistoryView({ go }) {
 
 function Chart({ points }) {
   // points: [{x: label, y1: weight, y2: e1rm}]
-  if (points.length < 2) return <p className="muted small">График появится после двух тренировок.</p>;
+  if (points.length < 2) return <p className="muted small">Das Diagramm erscheint nach zwei Trainings.</p>;
   const W = 340, H = 180, P = { l: 34, r: 10, t: 12, b: 24 };
   const ys = points.flatMap((p) => [p.y1, p.y2]);
   let lo = Math.min(...ys), hi = Math.max(...ys);
@@ -414,7 +512,7 @@ function Chart({ points }) {
   const ticks = [lo, (lo + hi) / 2, hi];
   const labelEvery = Math.ceil(points.length / 5);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label="График прогресса">
+    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label="Fortschrittsdiagramm">
       {ticks.map((t, i) => (
         <g key={i}>
           <line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} className="grid" />
@@ -442,30 +540,31 @@ function ProgressList({ go }) {
     .filter((x) => x.h.length);
   return (
     <>
-      <Header title="Прогресс" />
+      <Header title="Fortschritt" />
       <main className="pad">
-        {!list.length && <p className="muted center">Данные появятся после первой тренировки.</p>}
-        {list.map(({ e, h }) => {
-          const last = h[h.length - 1];
-          const first = h[0];
-          const diff = last.entry.weight - first.entry.weight;
-          return (
-            <button key={e.id} className="card list-card" onClick={() => go('exercise', { exId: e.id })}>
-              <div className="row between">
-                <div>
-                  <div className="muted small">{e.group}</div>
-                  <div className="big">{e.name}</div>
-                </div>
-                <div className="right">
-                  <div className="big">{L.fmtNum(last.entry.weight)} кг</div>
-                  <div className={'small ' + (diff > 0 ? 'good' : 'muted')}>
-                    {h.length > 1 ? (diff > 0 ? '+' : '') + L.fmtNum(diff) + ' кг' : 'новое'}
+        {!list.length && <p className="muted center">Daten erscheinen nach dem ersten Training.</p>}
+        {byGroup(list, (x) => x.e).map(([g, items]) => (
+          <div key={g}>
+            <h2>{g}</h2>
+            {items.map(({ e, h }) => {
+              const last = h[h.length - 1];
+              const diff = last.entry.weight - h[0].entry.weight;
+              return (
+                <button key={e.id} className="card list-card" onClick={() => go('exercise', { exId: e.id })}>
+                  <div className="row between">
+                    <div className="big">{e.name}</div>
+                    <div className="right">
+                      <div className="big">{L.fmtNum(last.entry.weight)} kg</div>
+                      <div className={'small ' + (diff > 0 ? 'good' : 'muted')}>
+                        {h.length > 1 ? (diff > 0 ? '+' : '') + L.fmtNum(diff) + ' kg' : 'neu'}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            </button>
-          );
-        })}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </main>
     </>
   );
@@ -483,35 +582,35 @@ function ExerciseProgress({ exId, back, go }) {
       <main className="pad">
         <div className="stats">
           <div className="stat">
-            <div className="muted small">Макс. вес</div>
-            <div className="big">{maxW ? L.fmtNum(maxW.entry.weight) : '—'} кг</div>
+            <div className="muted small">Max. Gewicht</div>
+            <div className="big">{maxW ? L.fmtNum(maxW.entry.weight) : '—'} kg</div>
             <div className="muted small">{maxW ? L.fmtDate(maxW.date) : ''}</div>
           </div>
           <div className="stat">
-            <div className="muted small">Рекорд (≈1ПМ)</div>
-            <div className="big">{best ? L.fmtNum(Math.round(L.bestE1rm(best.entry) * 10) / 10) : '—'} кг</div>
+            <div className="muted small">Rekord (≈1RM)</div>
+            <div className="big">{best ? L.fmtNum(Math.round(L.bestE1rm(best.entry) * 10) / 10) : '—'} kg</div>
             <div className="muted small">{best ? `${L.fmtNum(best.entry.weight)}×${Math.max(...L.doneReps(best.entry))}` : ''}</div>
           </div>
           <div className="stat">
-            <div className="muted small">Тренировок</div>
+            <div className="muted small">Trainings</div>
             <div className="big">{h.length}</div>
           </div>
         </div>
         <div className="card">
           <Chart points={points} />
           <div className="legend small">
-            <span><i className="sw s1" />Рабочий вес</span>
-            <span><i className="sw s2" />≈1ПМ</span>
+            <span><i className="sw s1" />Arbeitsgewicht</span>
+            <span><i className="sw s2" />≈1RM</span>
           </div>
         </div>
-        <h2>Все тренировки</h2>
+        <h2>Alle Trainings</h2>
         {[...h].reverse().map((x, i, arr) => {
           const prev = arr[i + 1]?.entry;
           return (
             <button key={x.workoutId} className="card hist" onClick={() => go('workout', { id: x.workoutId })}>
               <div className="hist-line">
                 <span className="hist-name">{L.fmtDate(x.date)}</span>
-                <span>{L.fmtNum(x.entry.weight)} кг × {L.doneReps(x.entry).join('/')}</span>
+                <span>{L.fmtNum(x.entry.weight)} kg × {L.doneReps(x.entry).join('/')}</span>
                 <ResultBadge r={L.compare(x.entry, prev)} />
               </div>
               {x.entry.note && <div className="muted small hist-note">{x.entry.note}</div>}
@@ -533,16 +632,16 @@ function ProgramView({ go }) {
   };
   return (
     <>
-      <Header title="Программа" />
+      <Header title="Plan" />
       <main className="pad">
         {ds.map((d) => (
           <button key={d.id} className="card list-card" onClick={() => go('day', { dayId: d.id })}>
             <div className="big">{d.name}</div>
-            <div className="muted small">{d.items.map((it) => exName(it.exId)).join(' · ') || 'Пусто'}</div>
+            <div className="muted small">{d.items.map((it) => exName(it.exId)).join(' · ') || 'Leer'}</div>
           </button>
         ))}
-        <button className="btn ghost" onClick={addDay}>+ День</button>
-        <button className="btn ghost" onClick={() => go('exercises')}>Все упражнения</button>
+        <button className="btn ghost" onClick={addDay}>+ Tag</button>
+        <button className="btn ghost" onClick={() => go('exercises')}>Übungen nach Muskelgruppen</button>
       </main>
     </>
   );
@@ -551,7 +650,7 @@ function ProgramView({ go }) {
 function DayEditor({ dayId, back }) {
   const d = store.get('day', dayId);
   const [adding, setAdding] = useState(false);
-  if (!d) return <><Header title="День" onBack={back} /></>;
+  if (!d) return <><Header title="Tag" onBack={back} /></>;
   const save = (patch) => store.put('day', { ...d, ...patch });
   const setItem = (i, patch) => save({ items: d.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) });
   const move = (i, dir) => {
@@ -566,7 +665,7 @@ function DayEditor({ dayId, back }) {
       <Header title={d.name} onBack={back} />
       <main className="pad">
         <div className="field">
-          <label>Название дня</label>
+          <label>Name des Tages</label>
           <input className="text" value={d.name} onChange={(e) => save({ name: e.target.value })} />
         </div>
         {d.items.map((it, i) => (
@@ -577,47 +676,47 @@ function DayEditor({ dayId, back }) {
                 <div className="big">{exName(it.exId)}</div>
               </div>
               <div className="row">
-                <button className="icon" onClick={() => move(i, -1)} aria-label="Выше">↑</button>
-                <button className="icon" onClick={() => move(i, 1)} aria-label="Ниже">↓</button>
+                <button className="icon" onClick={() => move(i, -1)} aria-label="Nach oben">↑</button>
+                <button className="icon" onClick={() => move(i, 1)} aria-label="Nach unten">↓</button>
               </div>
             </div>
             <div className="grid4">
               <div className="field">
-                <label>Подходы</label>
+                <label>Sätze</label>
                 <NumField value={it.sets} onChange={(v) => v && setItem(i, { sets: v })} />
               </div>
               <div className="field">
-                <label>Повт. от</label>
+                <label>Wdh. von</label>
                 <NumField value={it.repMin} onChange={(v) => setItem(i, { repMin: v })} />
               </div>
               <div className="field">
-                <label>до</label>
+                <label>bis</label>
                 <NumField value={it.repMax} onChange={(v) => setItem(i, { repMax: v })} />
               </div>
               <div className="field">
-                <label>Шаг, кг</label>
+                <label>Schritt, kg</label>
                 <NumField value={it.step} onChange={(v) => setItem(i, { step: v })} />
               </div>
             </div>
             <div className="row between">
               <label className="check">
-                <input type="checkbox" checked={!!it.warmup} onChange={(e) => setItem(i, { warmup: e.target.checked })} /> Разминочный подход
+                <input type="checkbox" checked={!!it.warmup} onChange={(e) => setItem(i, { warmup: e.target.checked })} /> Aufwärmsatz
               </label>
-              <button className="link small danger" onClick={() => save({ items: d.items.filter((_, j) => j !== i) })}>Убрать</button>
+              <button className="link small danger" onClick={() => save({ items: d.items.filter((_, j) => j !== i) })}>Entfernen</button>
             </div>
           </section>
         ))}
-        <button className="btn ghost" onClick={() => setAdding(true)}>+ Упражнение</button>
+        <button className="btn ghost" onClick={() => setAdding(true)}>+ Übung</button>
         <button
           className="link danger center-block"
           onClick={() => {
-            if (confirm(`Удалить «${d.name}» из программы? История тренировок сохранится.`)) {
+            if (confirm(`„${d.name}“ aus dem Plan löschen? Der Trainingsverlauf bleibt erhalten.`)) {
               store.remove('day', d.id);
               back();
             }
           }}
         >
-          Удалить день
+          Tag löschen
         </button>
       </main>
       {adding && (
@@ -635,25 +734,33 @@ function DayEditor({ dayId, back }) {
 
 function ExercisesEditor({ back }) {
   useStore();
-  const list = exercises();
+  const gs = groups().filter((g) => g !== NO_GROUP);
   return (
     <>
-      <Header title="Упражнения" onBack={back} />
+      <Header title="Übungen" onBack={back} />
       <main className="pad">
-        {list.map((e) => (
-          <section className="card" key={e.id}>
-            <div className="field">
-              <label>Название</label>
-              <input className="text" value={e.name} onChange={(ev) => store.put('exercise', { ...e, name: ev.target.value })} />
-            </div>
-            <div className="field">
-              <label>Группа</label>
-              <input className="text" value={e.group} onChange={(ev) => store.put('exercise', { ...e, group: ev.target.value })} />
-            </div>
-          </section>
+        <datalist id="groups">
+          {gs.map((g) => <option key={g} value={g} />)}
+        </datalist>
+        {byGroup(exercises()).map(([g, items]) => (
+          <div key={g}>
+            <h2>{g}</h2>
+            {items.map((e) => (
+              <section className="card" key={e.id}>
+                <div className="field">
+                  <label>Name</label>
+                  <input className="text" value={e.name} onChange={(ev) => store.put('exercise', { ...e, name: ev.target.value })} />
+                </div>
+                <div className="field">
+                  <label>Muskelgruppe</label>
+                  <input className="text" list="groups" value={e.group} onChange={(ev) => store.put('exercise', { ...e, group: ev.target.value })} />
+                </div>
+              </section>
+            ))}
+          </div>
         ))}
-        <button className="btn ghost" onClick={() => store.put('exercise', { id: uid(), name: 'Новое упражнение', group: '' })}>
-          + Упражнение
+        <button className="btn ghost" onClick={() => store.put('exercise', { id: uid(), name: 'Neue Übung', group: '' })}>
+          + Übung
         </button>
       </main>
     </>
@@ -681,7 +788,7 @@ function SyncBox() {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  if (!supabase) return <p className="muted small">Синхронизация не настроена: данные хранятся только на этом устройстве.</p>;
+  if (!supabase) return <p className="muted small">Synchronisierung ist nicht eingerichtet: Die Daten liegen nur auf diesem Gerät.</p>;
 
   if (!session) {
     const signIn = async () => {
@@ -693,16 +800,16 @@ function SyncBox() {
       setMsg('');
       const { error, data } = await supabase.auth.signUp({ email, password: pw, options: { emailRedirectTo: location.origin + location.pathname } });
       if (error) setMsg(error.message);
-      else if (!data.session) setMsg('Проверьте почту и подтвердите адрес, затем войдите.');
+      else if (!data.session) setMsg('Bitte bestätige deine E-Mail und melde dich dann an.');
     };
     return (
       <div>
-        <p className="muted small">Войдите, чтобы тренировки синхронизировались между телефоном и компьютером.</p>
-        <input className="text" type="email" autoComplete="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input className="text" type="password" autoComplete="current-password" placeholder="Пароль" value={pw} onChange={(e) => setPw(e.target.value)} />
+        <p className="muted small">Melde dich an, damit deine Trainings zwischen Handy und Computer synchronisiert werden.</p>
+        <input className="text" type="email" autoComplete="email" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input className="text" type="password" autoComplete="current-password" placeholder="Passwort" value={pw} onChange={(e) => setPw(e.target.value)} />
         <div className="row gap">
-          <button className="btn primary" onClick={signIn}>Войти</button>
-          <button className="btn" onClick={signUp}>Регистрация</button>
+          <button className="btn primary" onClick={signIn}>Anmelden</button>
+          <button className="btn" onClick={signUp}>Registrieren</button>
         </div>
         {msg && <p className="small bad">{msg}</p>}
       </div>
@@ -710,20 +817,20 @@ function SyncBox() {
   }
 
   const label = {
-    idle: 'Ожидание',
-    syncing: 'Синхронизация…',
-    ok: `Синхронизировано${s.at ? ' в ' + s.at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''}`,
-    offline: 'Нет интернета: синхронизирую, когда появится связь',
-    error: 'Ошибка: ' + s.error,
-    'signed-out': 'Не выполнен вход',
+    idle: 'Wartet',
+    syncing: 'Synchronisiere…',
+    ok: `Synchronisiert${s.at ? ' um ' + s.at.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : ''}`,
+    offline: 'Offline: wird synchronisiert, sobald Internet da ist',
+    error: 'Fehler: ' + s.error,
+    'signed-out': 'Nicht angemeldet',
   }[s.state];
   return (
     <div>
       <p className="small">{session.user.email}</p>
       <p className={'small ' + (s.state === 'error' ? 'bad' : 'muted')}>{label}</p>
       <div className="row gap">
-        <button className="btn" onClick={syncNow}>Синхронизировать</button>
-        <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Выйти</button>
+        <button className="btn" onClick={syncNow}>Jetzt synchronisieren</button>
+        <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Abmelden</button>
       </div>
     </div>
   );
@@ -745,31 +852,31 @@ function Settings() {
     if (!f) return;
     try {
       const n = store.importJson(await f.text());
-      setMsg(`Загружено записей: ${n}`);
+      setMsg(`Einträge geladen: ${n}`);
     } catch (err) {
-      setMsg('Не удалось прочитать файл: ' + err.message);
+      setMsg('Datei konnte nicht gelesen werden: ' + err.message);
     }
     e.target.value = '';
   };
   return (
     <>
-      <Header title="Ещё" />
+      <Header title="Mehr" />
       <main className="pad">
         <section className="card">
-          <h2>Синхронизация</h2>
+          <h2>Synchronisierung</h2>
           <SyncBox />
         </section>
         <section className="card">
-          <h2>Резервная копия</h2>
+          <h2>Sicherung</h2>
           <div className="row gap">
-            <button className="btn" onClick={download}>Скачать</button>
-            <button className="btn" onClick={() => fileRef.current.click()}>Загрузить</button>
+            <button className="btn" onClick={download}>Herunterladen</button>
+            <button className="btn" onClick={() => fileRef.current.click()}>Hochladen</button>
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={upload} />
           </div>
           {msg && <p className="small muted">{msg}</p>}
         </section>
         <p className="muted small center">
-          На iPhone: Safari → «Поделиться» → «На экран „Домой“», чтобы открыть как приложение.
+          iPhone: Safari → „Teilen“ → „Zum Home-Bildschirm“, um es wie eine App zu öffnen.
         </p>
       </main>
     </>
@@ -779,11 +886,11 @@ function Settings() {
 // --- shell --------------------------------------------------------------------
 
 const TABS = [
-  ['home', 'Тренировка', '🏋️'],
-  ['history', 'История', '🗓️'],
-  ['progress', 'Прогресс', '📈'],
-  ['program', 'Программа', '📋'],
-  ['more', 'Ещё', '⚙️'],
+  ['home', 'Training', '🏋️'],
+  ['history', 'Verlauf', '🗓️'],
+  ['progress', 'Fortschritt', '📈'],
+  ['program', 'Plan', '📋'],
+  ['more', 'Mehr', '⚙️'],
 ];
 
 export default function App() {
@@ -794,11 +901,17 @@ export default function App() {
     setStack((s) => [...s, { name, params }]);
     window.scrollTo(0, 0);
   };
+  // Swap the current screen (preview -> started workout), so Back goes home.
+  const replace = (name, params = {}) => {
+    setStack((s) => [...s.slice(0, -1), { name, params }]);
+    window.scrollTo(0, 0);
+  };
   const back = () => setStack((s) => s.slice(0, -1));
   const top = stack[stack.length - 1];
 
   let view;
   if (top?.name === 'workout') view = <Workout id={top.params.id} back={back} />;
+  else if (top?.name === 'preview') view = <DayPreview dayId={top.params.dayId} back={back} go={go} replace={replace} />;
   else if (top?.name === 'exercise') view = <ExerciseProgress exId={top.params.exId} back={back} go={go} />;
   else if (top?.name === 'day') view = <DayEditor dayId={top.params.dayId} back={back} />;
   else if (top?.name === 'exercises') view = <ExercisesEditor back={back} />;

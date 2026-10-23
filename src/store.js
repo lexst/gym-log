@@ -142,7 +142,7 @@ export function exportJson() {
 
 export function importJson(text) {
   const data = JSON.parse(text);
-  if (!data.docs) throw new Error('Неверный файл');
+  if (!data.docs) throw new Error('Ungültige Datei');
   const rows = [];
   for (const [kind, docs] of Object.entries(data.docs)) {
     for (const doc of Object.values(docs)) rows.push({ kind, id: doc.id, data: doc });
