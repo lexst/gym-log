@@ -43,17 +43,22 @@ function targetText(t) {
   return `${t.sets}×${t.repMin}${t.repMax && t.repMax !== t.repMin ? '–' + t.repMax : ''}`;
 }
 
-// What the next session of a planned exercise starts with.
-function plannedStart(it, ws) {
-  const prev = L.previous(ws, it.exId, { date: '9999-12-31' });
+const firstText = (ws, exId, wid) => (L.history(ws, exId).some((x) => x.workoutId !== wid) ? 'Erstes Mal an diesem Tag' : 'Erstes Mal');
+
+// What the next session of a planned exercise starts with. Compared with
+// the same day only; the first time on a day, take the last weight from
+// any day as a starting point.
+function plannedStart(it, ws, dayId) {
+  const prev = L.previous(ws, it.exId, { date: '9999-12-31', dayId });
   const sug = L.suggest(it, prev?.entry, it.step);
-  return { prev, weight: sug?.weight ?? null, up: !!sug?.up };
+  const any = prev || L.previous(ws, it.exId, { date: '9999-12-31' });
+  return { prev, weight: sug?.weight ?? any?.entry.weight ?? null, up: !!sug?.up };
 }
 
 function startWorkout(day) {
   const ws = workouts();
   const entries = day.items.map((it) => {
-    const { weight } = plannedStart(it, ws);
+    const { weight } = plannedStart(it, ws, day.id);
     return {
       exId: it.exId,
       unilateral: !!store.get('exercise', it.exId)?.unilateral,
@@ -203,7 +208,7 @@ function DayPreview({ dayId, back, go, replace }) {
       <main className="pad">
         {!d.items.length && <p className="muted center">Noch keine Übungen für diesen Tag.</p>}
         {d.items.map((it, i) => {
-          const { prev, weight, up } = plannedStart(it, ws);
+          const { prev, weight, up } = plannedStart(it, ws, d.id);
           return (
             <section className="card preview" key={i}>
               <div className="muted small">{exGroup(it.exId)}</div>
@@ -214,7 +219,7 @@ function DayPreview({ dayId, back, go, replace }) {
               <div className="small muted">
                 {prev
                   ? `Letztes Mal ${L.fmtDate(prev.date, false)}: ${L.fmtNum(prev.entry.weight)} kg × ${L.doneReps(prev.entry).join('/')}`
-                  : 'Erstes Mal'}
+                  : firstText(ws, it.exId)}
               </div>
               {weight != null && (
                 <div className={'small ' + (up ? 'good' : '')}>
@@ -296,7 +301,7 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
             Letztes Mal: {L.fmtNum(prev.weight)} kg{perSide(prev)} × {L.doneReps(prev).join('/')}
           </span>
         ) : (
-          <span className="muted">Erstes Mal</span>
+          <span className="muted">{firstText(ws, entry.exId, w.id)}</span>
         )}
       </div>
       {sug?.up && entry.weight !== sug.weight && !w.finished && (
@@ -450,7 +455,7 @@ function Workout({ id, back }) {
   };
   const removeEntry = (i) => save({ entries: w.entries.filter((_, j) => j !== i) });
   const addEntry = (exId) => {
-    const prev = L.previous(ws, exId, w)?.entry;
+    const prev = (L.previous(ws, exId, w) || L.previous(ws, exId, { date: w.date }))?.entry;
     save({
       entries: [
         ...w.entries,
@@ -665,7 +670,7 @@ function ExerciseProgress({ exId, back, go }) {
           return (
             <button key={x.workoutId} className="card hist" onClick={() => go('workout', { id: x.workoutId })}>
               <div className="hist-line">
-                <span className="hist-name">{L.fmtDate(x.date)}</span>
+                <span className="hist-name">{L.fmtDate(x.date)} <span className="muted small">{dayName(store.get('workout', x.workoutId)?.dayId)}</span></span>
                 <span>{L.fmtNum(x.entry.weight)} kg × {L.doneReps(x.entry).join('/')}</span>
                 <ResultBadge r={L.compare(x.entry, prev)} top={L.topReached(x.entry)} soft={store.get('workout', x.workoutId)?.pause} />
               </div>
