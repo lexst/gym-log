@@ -48,7 +48,10 @@ export function slug(s) {
 
 // Tag 2 and Tag 3 as logged in Notion (15.10.26 and 17.10.26).
 const it = (exId, sets, repMin, repMax, step, warmup = true) => ({ exId, sets, repMin, repMax, step, warmup });
-export const NOTION_EXTRA_EXERCISES = [{ id: 'ex-reverse-flys-sz', name: 'Reverse Flys SZ', group: 'Schulter hinten isoliert' }];
+export const NOTION_EXTRA_EXERCISES = [
+  { id: 'ex-reverse-flys-sz', name: 'Reverse Flys SZ', group: 'Schulter hinten isoliert' },
+  { id: 'ex-bizepscurls-kh', name: 'Bizepscurls mit KH', group: 'Bizeps 1', unilateral: true },
+];
 
 function logged(id, dayId, date, items, results) {
   return {
@@ -56,6 +59,7 @@ function logged(id, dayId, date, items, results) {
     entries: items.map((t, i) => ({
       exId: t.exId, sets: t.sets, repMin: t.repMin, repMax: t.repMax, step: t.step,
       weight: results[i][0], reps: results[i][1], warmup: null, note: '',
+      ...(results[i][2] ? { unilateral: true, side: results[i][2] } : {}),
     })),
   };
 }
@@ -67,6 +71,7 @@ const TAG2 = [
   it('cat-latzug-maschine-og', 2, 8, 10, 2.5),
   it('cat-schulterdruecken-mit-kh', 2, 6, 8, 2),
   it('ex-reverse-flys-sz', 2, 8, 10, 2.5, false),
+  it('ex-bizepscurls-kh', 2, null, null, 1, false),
 ];
 const TAG3 = [
   it('cat-hipthrust-maschine', 2, 8, 10, 5),
@@ -80,7 +85,7 @@ const TAG3 = [
 // [dayId, planned items, logged session]
 export const NOTION_DAYS = [
   ['day-2', TAG2, logged('w-2026-10-15-tag2', 'day-2', '2026-10-15', TAG2,
-    [[125, [10, 10, 8]], [120, [8, 8]], [45, [6, 6]], [40, [9, 8]], [20, [9, 9]], [35, [6, null]]])],
+    [[125, [10, 10, 8]], [120, [8, 8]], [45, [6, 6]], [40, [9, 8]], [20, [9, 9]], [35, [6, null]], [8, [8, 8], { L: [8, 8], R: [8, 8] }]])],
   ['day-3', TAG3, logged('w-2026-10-17-tag3', 'day-3', '2026-10-17', TAG3,
     [[130, [10, 9]], [65, [10, 9]], [45, [7, 6]], [25, [9, 8, null]], [50, [9, 8]], [20, [8, 6]]])],
 ];

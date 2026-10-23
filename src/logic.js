@@ -42,6 +42,13 @@ export function e1rm(weight, reps) {
   return reps === 1 ? weight : weight * (1 + reps / 30);
 }
 
+// One-arm/one-leg sets: the weaker side counts for progression.
+export function combineSides(l, r) {
+  if (l == null) return r ?? null;
+  if (r == null) return l;
+  return Math.min(l, r);
+}
+
 export function doneReps(entry) {
   return (entry.reps || []).filter((r) => r !== null && r !== undefined && r > 0);
 }

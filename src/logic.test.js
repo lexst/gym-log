@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous } from './logic.js';
+import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides } from './logic.js';
 
 test('warm-up is half the weight, rounded down', () => {
   assert.equal(warmupWeight(65), 30);
@@ -46,4 +46,11 @@ test('next day follows the last finished one', () => {
 test('parses comma decimals', () => {
   assert.equal(parseNum('32,5'), 32.5);
   assert.equal(parseNum(''), null);
+});
+
+test('one-sided sets count the weaker side', () => {
+  assert.equal(combineSides(8, 7), 7);
+  assert.equal(combineSides(null, 9), 9);
+  assert.equal(combineSides(10, null), 10);
+  assert.equal(combineSides(null, null), null);
 });
