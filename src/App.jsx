@@ -3,6 +3,7 @@ import * as store from './store.js';
 import { useStore, uid } from './store.js';
 import * as L from './logic.js';
 import { supabase, syncNow, onStatus, status as initialStatus } from './sync.js';
+import { GROUP_ORDER } from './catalog.js';
 
 // --- data helpers -----------------------------------------------------------
 
@@ -15,7 +16,8 @@ const dayName = (id) => store.get('day', id)?.name || '';
 const activeWorkout = () => workouts().find((w) => !w.finished);
 const NO_GROUP = 'Ohne Gruppe';
 const groupOf = (e) => e.group?.trim() || NO_GROUP;
-const groups = () => [...new Set(exercises().map(groupOf))].sort((a, b) => (a === NO_GROUP ? 1 : b === NO_GROUP ? -1 : a.localeCompare(b)));
+const groupRank = (g) => (g === NO_GROUP ? 1e9 : GROUP_ORDER.indexOf(g) === -1 ? 1e6 : GROUP_ORDER.indexOf(g));
+const groups = () => [...new Set(exercises().map(groupOf))].sort((a, b) => groupRank(a) - groupRank(b) || a.localeCompare(b));
 
 // [[group, items]] in group order; key(item) gives the exercise.
 function byGroup(items, key = (x) => x) {

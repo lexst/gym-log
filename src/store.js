@@ -3,6 +3,7 @@
 // remote ones by last-write-wins on updatedAt.
 import { useSyncExternalStore } from 'react';
 import { seedDocs } from './seed.js';
+import { CATALOG, SEED_FIXES, slug } from './catalog.js';
 
 const KEY = 'gymlog:v1';
 const listeners = new Set();
@@ -81,6 +82,29 @@ export function ensureSeed() {
     for (const doc of docs) if (!state.docs[kind]?.[doc.id]) write(kind, doc, 1);
   }
   state.seeded = true;
+  emit();
+}
+
+// Adds the plan's exercise catalog once. Fixes to seeded exercises get
+// updatedAt + 1, so a newer synced edit of the same doc still wins.
+export function ensureCatalog() {
+  if ((state.catalog || 0) >= 1) return;
+  for (const [id, old, next] of SEED_FIXES) {
+    const d = state.docs.exercise?.[id];
+    if (!d || d.deleted) continue;
+    const patch = {};
+    for (const k of Object.keys(old)) if (d[k] === old[k]) patch[k] = next[k];
+    if (Object.keys(patch).length) write('exercise', { ...d, ...patch }, (d.updatedAt || 0) + 1);
+  }
+  const names = new Set(all('exercise').map((e) => e.name.toLowerCase()));
+  for (const [group, list] of CATALOG) {
+    for (const name of list) {
+      const id = 'cat-' + slug(name);
+      if (state.docs.exercise?.[id] || names.has(name.toLowerCase())) continue;
+      write('exercise', { id, name, group }, 1);
+    }
+  }
+  state.catalog = 1;
   emit();
 }
 
