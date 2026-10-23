@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides, topReached } from './logic.js';
+import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides, topReached, fmtClock, parsePattern, phaseAt } from './logic.js';
 
 test('warm-up is half the weight, rounded down', () => {
   assert.equal(warmupWeight(65), 30);
@@ -73,4 +73,22 @@ test('an exercise is compared with the same training day only', () => {
   assert.equal(previous(ws, 'x', { id: 'n', date: '2026-10-07', dayId: 'd2' }).workoutId, 'b');
   assert.equal(isPr(ws, ws[1].entries[0], ws[1]), false);
   assert.equal(previous(ws, 'x', { date: '2026-10-07' }).workoutId, 'c');
+});
+
+test('rest timer clock', () => {
+  assert.equal(fmtClock(0), '0:00');
+  assert.equal(fmtClock(95000), '1:35');
+  assert.equal(fmtClock(180999), '3:00');
+  assert.equal(fmtClock(-5), '0:00');
+});
+
+test('stretch intervals', () => {
+  assert.deepEqual(parsePattern('30-10-30-10-30'), [30, 10, 30, 10, 30]);
+  assert.deepEqual(parsePattern(' 45 / 15 '), [45, 15]);
+  assert.equal(parsePattern('abc'), null);
+  const p = [30, 10, 30];
+  assert.deepEqual(phaseAt(p, 0), { i: 0, left: 30000, done: false });
+  assert.deepEqual(phaseAt(p, 35000), { i: 1, left: 5000, done: false });
+  assert.deepEqual(phaseAt(p, 40000), { i: 2, left: 30000, done: false });
+  assert.equal(phaseAt(p, 70000).done, true);
 });

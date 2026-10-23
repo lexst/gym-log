@@ -188,6 +188,11 @@ function Home({ go }) {
             </button>
           );
         })}
+        <h2>Sonstiges</h2>
+        <button className="card list-card" onClick={() => go('stretch')}>
+          <div className="big">Dehnen</div>
+          <div className="muted small">Intervall-Timer, z. B. 30-10-30-10-30</div>
+        </button>
       </main>
     </>
   );
@@ -495,7 +500,7 @@ function Workout({ id, back }) {
         onBack={back}
         right={<input type="date" className="date" value={w.date} onChange={(e) => e.target.value && save({ date: e.target.value })} />}
       />
-      <main className="pad">
+      <main className={'pad' + (w.finished ? '' : ' with-timer')}>
         {w.entries.map((e, i) => (
           <EntryCard key={i} w={w} entry={e} index={i} update={update} removeEntry={removeEntry} ws={ws} />
         ))}
@@ -517,7 +522,244 @@ function Workout({ id, back }) {
         )}
         <button className="link danger center-block" onClick={del}>Training löschen</button>
       </main>
+      {!w.finished && <RestTimer />}
       {adding && <AddExercise onAdd={addEntry} onClose={() => setAdding(false)} />}
+    </>
+  );
+}
+
+// --- rest timer -----------------------------------------------------------------
+// Started by hand and counts up, so a longer break (changing weights) needs
+// no stopping. Kept per device; times come from timestamps, so the clock is
+// right again after the app was in the background.
+
+const TIMER_KEY = 'gymlog:timer';
+const loadTimer = () => {
+  try {
+    return JSON.parse(localStorage.getItem(TIMER_KEY));
+  } catch {
+    return null;
+  }
+};
+const saveTimer = (t) => {
+  try {
+    if (t) localStorage.setItem(TIMER_KEY, JSON.stringify(t));
+    else localStorage.removeItem(TIMER_KEY);
+  } catch {}
+};
+
+// Optional: also start the iPhone's own timer through a Shortcut, which
+// rings even when this app is in the background. Per device.
+const PREFS_KEY = 'gymlog:prefs';
+const loadPrefs = () => {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+  } catch {
+    return {};
+  }
+};
+const savePrefs = (p) => {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+  } catch {}
+};
+const shortcutUrl = (name, sec) =>
+  `shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${sec}`;
+
+let audio;
+function unlockAudio() {
+  try {
+    audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume?.();
+  } catch {}
+}
+function beep(tones = [[0, 880], [0.25, 880], [0.5, 1175]]) {
+  try {
+    if (!audio) return;
+    for (const [at, f] of tones) {
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.25, audio.currentTime + at);
+      g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + at + 0.2);
+      o.connect(g).connect(audio.destination);
+      o.start(audio.currentTime + at);
+      o.stop(audio.currentTime + at + 0.2);
+    }
+    navigator.vibrate?.([200, 100, 200]);
+  } catch {}
+}
+
+function RestTimer() {
+  const [t, setT] = useState(loadTimer);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!t) return;
+    const id = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(id);
+  }, [t]);
+  const elapsed = t ? Date.now() - t.start : 0;
+  const done = t && elapsed >= t.target;
+  useEffect(() => {
+    if (done && !t.beeped) {
+      beep();
+      const next = { ...t, beeped: true };
+      saveTimer(next);
+      setT(next);
+    }
+  }, [done]);
+  const update = (next) => {
+    saveTimer(next);
+    setT(next);
+  };
+  const start = (sec) => {
+    unlockAudio();
+    update({ start: Date.now(), target: sec * 1000 });
+    const prefs = loadPrefs();
+    if (prefs.shortcut) window.location.href = shortcutUrl(prefs.shortcutName || 'Pause', sec);
+  };
+
+  if (!t) {
+    return (
+      <div className="timer">
+        <span className="muted small">Pause</span>
+        <button className="chip-btn" onClick={() => start(90)}>1:30</button>
+        <button className="chip-btn" onClick={() => start(180)}>3:00</button>
+      </div>
+    );
+  }
+  return (
+    <div className={'timer running' + (done ? ' done' : '')}>
+      <div className="timer-clock">
+        <span className="timer-time">{L.fmtClock(elapsed)}</span>
+        <span className="small">{done ? 'Pause vorbei' : `von ${L.fmtClock(t.target)}`}</span>
+      </div>
+      <div className="timer-bar"><i style={{ width: `${Math.min(100, (elapsed / t.target) * 100)}%` }} /></div>
+      <button className="chip-btn" onClick={() => update({ ...t, target: t.target + 30000, beeped: elapsed >= t.target + 30000 })}>+30 s</button>
+      <button className="chip-btn" onClick={() => update(null)}>Stopp</button>
+    </div>
+  );
+}
+
+// --- stretching ---------------------------------------------------------------
+// Interval timer: "30-10-30-10-30" = stretch 30 s, rest 10 s, ... Patterns are
+// synced; the screen is kept on while it runs, since iOS pauses web apps in
+// the background.
+
+const DEFAULT_PATTERNS = ['30-10-30-10-30'];
+const stretchDoc = () => store.get('setting', 'stretch') || { id: 'stretch', patterns: DEFAULT_PATTERNS };
+
+function useWakeLock(on) {
+  useEffect(() => {
+    if (!on || !navigator.wakeLock) return;
+    let lock;
+    let alive = true;
+    const req = () => navigator.wakeLock.request('screen').then((l) => { if (alive) lock = l; else l.release(); }).catch(() => {});
+    req();
+    const vis = () => document.visibilityState === 'visible' && req();
+    document.addEventListener('visibilitychange', vis);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', vis);
+      lock?.release().catch(() => {});
+    };
+  }, [on]);
+}
+
+function Stretch({ back }) {
+  const doc = stretchDoc();
+  const [run, setRun] = useState(null); // { pattern, start, pausedAt, pausedTotal }
+  const [, tick] = useState(0);
+  const [draft, setDraft] = useState('');
+  const lastPhase = useRef(null);
+  useWakeLock(!!run && !run.pausedAt);
+  useEffect(() => {
+    if (!run) return;
+    const id = setInterval(() => tick((n) => n + 1), 200);
+    return () => clearInterval(id);
+  }, [run]);
+
+  const now = run?.pausedAt || Date.now();
+  const ph = run ? L.phaseAt(run.pattern, now - run.start - run.pausedTotal) : null;
+  useEffect(() => {
+    if (!ph) return;
+    const key = ph.done ? 'done' : ph.i;
+    if (lastPhase.current !== null && lastPhase.current !== key) {
+      if (ph.done) beep([[0, 1175], [0.25, 1175], [0.5, 1568]]);
+      else if (ph.i % 2) beep([[0, 660]]);
+      else beep([[0, 880], [0.2, 1175]]);
+    }
+    lastPhase.current = key;
+  });
+
+  const save = (patterns) => store.put('setting', { ...doc, patterns });
+  const add = () => {
+    const p = L.parsePattern(draft);
+    if (!p) return;
+    const text = p.join('-');
+    if (!doc.patterns.includes(text)) save([...doc.patterns, text]);
+    setDraft('');
+  };
+  const start = (text) => {
+    unlockAudio();
+    lastPhase.current = null;
+    setRun({ pattern: L.parsePattern(text), text, start: Date.now(), pausedAt: null, pausedTotal: 0 });
+  };
+  const pause = () => setRun({ ...run, pausedAt: Date.now() });
+  const resume = () => setRun({ ...run, pausedAt: null, pausedTotal: run.pausedTotal + Date.now() - run.pausedAt });
+
+  if (run) {
+    const sets = Math.ceil(run.pattern.length / 2);
+    const rest = ph.i % 2 === 1;
+    const len = run.pattern[ph.i] * 1000;
+    return (
+      <>
+        <Header title="Dehnen" onBack={() => setRun(null)} />
+        <main className="pad">
+          <section className={'card stretch-run' + (ph.done ? ' done' : rest ? ' rest' : '')}>
+            <div className="muted">{run.text}</div>
+            <div className="stretch-phase">{ph.done ? 'Fertig' : rest ? 'Pause' : `Dehnen ${ph.i / 2 + 1}/${sets}`}</div>
+            <div className="stretch-time">{ph.done ? '✓' : Math.ceil(ph.left / 1000)}</div>
+            <div className="timer-bar"><i style={{ width: `${ph.done ? 100 : ((len - ph.left) / len) * 100}%` }} /></div>
+            {!ph.done && ph.i + 1 < run.pattern.length && (
+              <div className="small muted">Danach: {ph.i % 2 ? 'Dehnen' : 'Pause'} {run.pattern[ph.i + 1]} s</div>
+            )}
+          </section>
+          {ph.done ? (
+            <button className="btn primary" onClick={() => start(run.text)}>Nochmal</button>
+          ) : run.pausedAt ? (
+            <button className="btn primary" onClick={resume}>Weiter</button>
+          ) : (
+            <button className="btn" onClick={pause}>Anhalten</button>
+          )}
+          <button className="btn" onClick={() => setRun(null)}>{ph.done ? 'Zurück' : 'Stopp'}</button>
+        </main>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Header title="Dehnen" onBack={back} />
+      <main className="pad">
+        <p className="muted small">Sekunden Dehnen und Pause im Wechsel. Der Bildschirm bleibt an, solange der Timer läuft.</p>
+        {doc.patterns.map((t) => (
+          <div key={t} className="card row between">
+            <button className="stretch-start" onClick={() => start(t)}>
+              <span className="big">{t}</span>
+              <span className="muted small"> · {L.fmtClock(L.parsePattern(t).reduce((a, b) => a + b, 0) * 1000)}</span>
+            </button>
+            <button className="btn primary stretch-go" onClick={() => start(t)}>Start</button>
+            {doc.patterns.length > 1 && (
+              <button className="link danger" aria-label={`${t} löschen`} onClick={() => save(doc.patterns.filter((x) => x !== t))}>✕</button>
+            )}
+          </div>
+        ))}
+        <div className="row gap stretch-add">
+          <input className="text" style={{ flex: 1, width: 'auto', minWidth: 0, margin: 0 }} placeholder="z. B. 45-15-45" value={draft} onChange={(e) => setDraft(e.target.value)} inputMode="numeric" />
+          <button className="btn" style={{ margin: 0, flex: '0 0 auto' }} onClick={add} disabled={!L.parsePattern(draft)}>Hinzufügen</button>
+        </div>
+      </main>
     </>
   );
 }
@@ -963,6 +1205,40 @@ function SyncBox() {
   );
 }
 
+function TimerSettings() {
+  const [p, setP] = useState(loadPrefs);
+  const set = (patch) => {
+    const next = { ...p, ...patch };
+    savePrefs(next);
+    setP(next);
+  };
+  const name = p.shortcutName || 'Pause';
+  return (
+    <section className="card">
+      <h2>Pause-Timer</h2>
+      <label className="check">
+        <input type="checkbox" checked={!!p.shortcut} onChange={(e) => set({ shortcut: e.target.checked })} />
+        <span>iPhone-Timer mitstarten (klingelt auch im Hintergrund)</span>
+      </label>
+      {p.shortcut && (
+        <>
+          <div className="field">
+            <label>Name des Kurzbefehls</label>
+            <input className="text" value={name} onChange={(e) => set({ shortcutName: e.target.value })} />
+          </div>
+          <ol className="small muted steps">
+            <li>App „Kurzbefehle“ öffnen → „+“.</li>
+            <li>Aktion „Timer starten“ hinzufügen.</li>
+            <li>Bei der Dauer die Variable „Kurzbefehleingabe“ wählen, Einheit „Sekunden“.</li>
+            <li>Den Kurzbefehl „{name}“ nennen.</li>
+          </ol>
+          <a className="btn" href={shortcutUrl(name, 10)}>Testen (10 Sekunden)</a>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Settings() {
   const fileRef = useRef();
   const [msg, setMsg] = useState('');
@@ -993,6 +1269,7 @@ function Settings() {
           <h2>Synchronisierung</h2>
           <SyncBox />
         </section>
+        <TimerSettings />
         <section className="card">
           <h2>Sicherung</h2>
           <div className="row gap">
@@ -1042,6 +1319,7 @@ export default function App() {
   else if (top?.name === 'exercise') view = <ExerciseProgress exId={top.params.exId} back={back} go={go} />;
   else if (top?.name === 'day') view = <DayEditor dayId={top.params.dayId} back={back} />;
   else if (top?.name === 'exercises') view = <ExercisesEditor back={back} />;
+  else if (top?.name === 'stretch') view = <Stretch back={back} />;
   else if (tab === 'home') view = <Home go={go} />;
   else if (tab === 'history') view = <HistoryView go={go} />;
   else if (tab === 'progress') view = <ProgressList go={go} />;
