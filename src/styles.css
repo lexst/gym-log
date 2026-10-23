@@ -254,3 +254,6 @@ button.card:active { background: var(--card2); }
 .timer-bar i { display: block; height: 100%; background: var(--accent); transition: width 0.5s linear; }
 .timer.done .timer-time, .timer.done .small { color: var(--good); }
 .timer.done .timer-bar i { background: var(--good); }
+.steps { margin: 10px 0 0; padding-left: 20px; }
+.steps li { margin: 3px 0; }
+a.btn { text-align: center; text-decoration: none; color: inherit; }

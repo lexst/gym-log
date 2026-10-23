@@ -543,6 +543,24 @@ const saveTimer = (t) => {
   } catch {}
 };
 
+// Optional: also start the iPhone's own timer through a Shortcut, which
+// rings even when this app is in the background. Per device.
+const PREFS_KEY = 'gymlog:prefs';
+const loadPrefs = () => {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+  } catch {
+    return {};
+  }
+};
+const savePrefs = (p) => {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+  } catch {}
+};
+const shortcutUrl = (name, sec) =>
+  `shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${sec}`;
+
 let audio;
 function beep() {
   try {
@@ -589,6 +607,8 @@ function RestTimer() {
       audio.resume?.();
     } catch {}
     update({ start: Date.now(), target: sec * 1000 });
+    const prefs = loadPrefs();
+    if (prefs.shortcut) window.location.href = shortcutUrl(prefs.shortcutName || 'Pause', sec);
   };
 
   if (!t) {
@@ -1054,6 +1074,40 @@ function SyncBox() {
   );
 }
 
+function TimerSettings() {
+  const [p, setP] = useState(loadPrefs);
+  const set = (patch) => {
+    const next = { ...p, ...patch };
+    savePrefs(next);
+    setP(next);
+  };
+  const name = p.shortcutName || 'Pause';
+  return (
+    <section className="card">
+      <h2>Pause-Timer</h2>
+      <label className="check">
+        <input type="checkbox" checked={!!p.shortcut} onChange={(e) => set({ shortcut: e.target.checked })} />
+        <span>iPhone-Timer mitstarten (klingelt auch im Hintergrund)</span>
+      </label>
+      {p.shortcut && (
+        <>
+          <div className="field">
+            <label>Name des Kurzbefehls</label>
+            <input className="text" value={name} onChange={(e) => set({ shortcutName: e.target.value })} />
+          </div>
+          <ol className="small muted steps">
+            <li>App „Kurzbefehle“ öffnen → „+“.</li>
+            <li>Aktion „Timer starten“ hinzufügen.</li>
+            <li>Bei der Dauer die Variable „Kurzbefehleingabe“ wählen, Einheit „Sekunden“.</li>
+            <li>Den Kurzbefehl „{name}“ nennen.</li>
+          </ol>
+          <a className="btn" href={shortcutUrl(name, 10)}>Testen (10 Sekunden)</a>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Settings() {
   const fileRef = useRef();
   const [msg, setMsg] = useState('');
@@ -1084,6 +1138,7 @@ function Settings() {
           <h2>Synchronisierung</h2>
           <SyncBox />
         </section>
+        <TimerSettings />
         <section className="card">
           <h2>Sicherung</h2>
           <div className="row gap">
