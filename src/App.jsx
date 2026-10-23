@@ -3,6 +3,7 @@ import * as store from './store.js';
 import { useStore, uid } from './store.js';
 import * as L from './logic.js';
 import { supabase, syncNow, onStatus, status as initialStatus } from './sync.js';
+import { GROUP_ORDER } from './catalog.js';
 
 // --- data helpers -----------------------------------------------------------
 
@@ -15,7 +16,8 @@ const dayName = (id) => store.get('day', id)?.name || '';
 const activeWorkout = () => workouts().find((w) => !w.finished);
 const NO_GROUP = 'Ohne Gruppe';
 const groupOf = (e) => e.group?.trim() || NO_GROUP;
-const groups = () => [...new Set(exercises().map(groupOf))].sort((a, b) => (a === NO_GROUP ? 1 : b === NO_GROUP ? -1 : a.localeCompare(b)));
+const groupRank = (g) => (g === NO_GROUP ? 1e9 : GROUP_ORDER.indexOf(g) === -1 ? 1e6 : GROUP_ORDER.indexOf(g));
+const groups = () => [...new Set(exercises().map(groupOf))].sort((a, b) => groupRank(a) - groupRank(b) || a.localeCompare(b));
 
 // [[group, items]] in group order; key(item) gives the exercise.
 function byGroup(items, key = (x) => x) {
@@ -54,6 +56,7 @@ function startWorkout(day) {
     const { weight } = plannedStart(it, ws);
     return {
       exId: it.exId,
+      unilateral: !!store.get('exercise', it.exId)?.unilateral,
       sets: it.sets,
       repMin: it.repMin,
       repMax: it.repMax,
@@ -241,7 +244,8 @@ function DayPreview({ dayId, back, go, replace }) {
 function EntryCard({ w, entry, index, update, removeEntry, ws }) {
   const prev = L.previous(ws, entry.exId, w)?.entry;
   const sug = L.suggest(entry, prev, entry.step);
-  const r = L.compare(entry, prev);
+  // Judge the result only once every set is logged, not halfway through.
+  const r = w.finished || entry.reps.every((x) => x != null) ? L.compare(entry, prev) : null;
   const pr = w.finished && L.isPr(ws, entry, w);
   const set = (patch) => update(index, { ...entry, ...patch });
   const setRep = (i, v) => {
@@ -249,6 +253,25 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
     reps[i] = v;
     set({ reps });
   };
+  const sides = entry.side || { L: [...entry.reps], R: [...entry.reps] };
+  const setSide = (i, k, v) => {
+    const side = { L: [...sides.L], R: [...sides.R] };
+    side[k][i] = v;
+    const reps = [...entry.reps];
+    reps[i] = L.combineSides(side.L[i], side.R[i]);
+    set({ side, reps });
+  };
+  const resize = (n) => {
+    const fit = (a) => Array.from({ length: n }, (_, i) => a[i] ?? null);
+    set({ reps: fit(entry.reps), ...(entry.side ? { side: { L: fit(entry.side.L), R: fit(entry.side.R) } } : {}) });
+  };
+  const toggleSides = () => {
+    const on = !entry.unilateral;
+    const ex = store.get('exercise', entry.exId);
+    if (ex) store.put('exercise', { ...ex, unilateral: on });
+    set({ unilateral: on, side: on ? { L: [...entry.reps], R: [...entry.reps] } : null });
+  };
+  const perSide = (e) => (e?.unilateral ? ' je Seite' : '');
   const target = entry.repMin ? targetText(entry) : `${entry.reps.length} Sätze`;
 
   return (
@@ -264,7 +287,7 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
         <span className="chip">{target}</span>
         {prev ? (
           <span className="muted">
-            Letztes Mal: {L.fmtNum(prev.weight)} kg × {L.doneReps(prev).join('/')}
+            Letztes Mal: {L.fmtNum(prev.weight)} kg{perSide(prev)} × {L.doneReps(prev).join('/')}
           </span>
         ) : (
           <span className="muted">Erstes Mal</span>
@@ -280,7 +303,7 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
       )}
 
       <div className="field">
-        <label>Gewicht, kg</label>
+        <label>{entry.unilateral ? 'Gewicht je Seite, kg' : 'Gewicht, kg'}</label>
         <Stepper value={entry.weight} step={entry.step || 2.5} onChange={(v) => set({ weight: v })} ariaLabel="Arbeitsgewicht" />
       </div>
 
@@ -303,14 +326,31 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
       {entry.reps.map((rep, i) => (
         <div className="set-row" key={i}>
           <span className="set-label">Satz {i + 1}</span>
-          <NumField
-            className="w-md"
-            value={rep}
-            placeholder={prev?.reps?.[i] != null ? String(prev.reps[i]) : '—'}
-            onChange={(v) => setRep(i, v)}
-            ariaLabel={`Wiederholungen, Satz ${i + 1}`}
-          />
-          <span className="muted small">Wdh.</span>
+          {entry.unilateral ? (
+            ['L', 'R'].map((k) => (
+              <span className="side" key={k}>
+                <span className="muted small">{k}</span>
+                <NumField
+                  className="w-sm"
+                  value={sides[k][i]}
+                  placeholder={(prev?.side?.[k]?.[i] ?? prev?.reps?.[i]) != null ? String(prev?.side?.[k]?.[i] ?? prev.reps[i]) : '—'}
+                  onChange={(v) => setSide(i, k, v)}
+                  ariaLabel={`Wiederholungen ${k === 'L' ? 'links' : 'rechts'}, Satz ${i + 1}`}
+                />
+              </span>
+            ))
+          ) : (
+            <>
+              <NumField
+                className="w-md"
+                value={rep}
+                placeholder={prev?.reps?.[i] != null ? String(prev.reps[i]) : '—'}
+                onChange={(v) => setRep(i, v)}
+                ariaLabel={`Wiederholungen, Satz ${i + 1}`}
+              />
+              <span className="muted small">Wdh.</span>
+            </>
+          )}
           {rep != null && entry.repMax && (
             <span className={'small ' + (rep >= entry.repMax ? 'good' : rep < entry.repMin ? 'bad' : 'muted')}>
               {rep >= entry.repMax ? 'oben' : rep < entry.repMin ? 'zu wenig' : ''}
@@ -319,10 +359,11 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
         </div>
       ))}
       <div className="row gap">
-        <button className="link small" onClick={() => set({ reps: [...entry.reps, null] })}>+ Satz</button>
+        <button className="link small" onClick={() => resize(entry.reps.length + 1)}>+ Satz</button>
         {entry.reps.length > 1 && (
-          <button className="link small" onClick={() => set({ reps: entry.reps.slice(0, -1) })}>− Satz</button>
+          <button className="link small" onClick={() => resize(entry.reps.length - 1)}>− Satz</button>
         )}
+        <button className="link small" onClick={toggleSides}>{entry.unilateral ? 'beidseitig' : 'links/rechts'}</button>
         {!entry.warmup && (
           <button className="link small" onClick={() => set({ warmup: { weight: L.warmupWeight(entry.weight), reps: null, done: false } })}>
             + Aufwärmen
@@ -410,6 +451,7 @@ function Workout({ id, back }) {
         {
           exId,
           extra: true,
+          unilateral: !!store.get('exercise', exId)?.unilateral,
           sets: prev?.reps?.length || 1,
           repMin: prev?.repMin || null,
           repMax: prev?.repMax || null,
@@ -702,6 +744,17 @@ function DayEditor({ dayId, back }) {
               <label className="check">
                 <input type="checkbox" checked={!!it.warmup} onChange={(e) => setItem(i, { warmup: e.target.checked })} /> Aufwärmsatz
               </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={!!store.get('exercise', it.exId)?.unilateral}
+                  onChange={(e) => {
+                    const ex = store.get('exercise', it.exId);
+                    if (ex) store.put('exercise', { ...ex, unilateral: e.target.checked });
+                  }}
+                />{' '}
+                Links/rechts
+              </label>
               <button className="link small danger" onClick={() => save({ items: d.items.filter((_, j) => j !== i) })}>Entfernen</button>
             </div>
           </section>
@@ -755,6 +808,9 @@ function ExercisesEditor({ back }) {
                   <label>Muskelgruppe</label>
                   <input className="text" list="groups" value={e.group} onChange={(ev) => store.put('exercise', { ...e, group: ev.target.value })} />
                 </div>
+                <label className="check">
+                  <input type="checkbox" checked={!!e.unilateral} onChange={(ev) => store.put('exercise', { ...e, unilateral: ev.target.checked })} /> Links und rechts getrennt
+                </label>
               </section>
             ))}
           </div>
