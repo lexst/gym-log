@@ -1,1 +1,33 @@
-# gym-log
+# Дневник тренировок
+
+Личный дневник тренировок в зале: программа по дням, запись подходов с подсказками
+по весу (двойная прогрессия), разминочный подход, история, графики и личные рекорды.
+Работает на телефоне как приложение (PWA), без интернета; синхронизация через Supabase.
+
+## Разработка
+
+```sh
+npm install
+npm run dev      # локальный сервер
+npm test         # тесты логики
+npm run build    # сборка в dist/
+```
+
+Для синхронизации создайте `.env.local`:
+
+```
+VITE_SUPABASE_URL=https://xxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=...
+```
+
+## Supabase
+
+1. Создать проект на supabase.com.
+2. SQL Editor → выполнить `supabase/schema.sql`.
+3. Authentication → URL Configuration: добавить адрес сайта на GitHub Pages.
+
+## Публикация
+
+GitHub Actions (`.github/workflows/pages.yml`) собирает и выкладывает приложение на
+GitHub Pages при каждом пуше в `main`. В Settings → Pages выбрать Source: GitHub Actions,
+в Settings → Secrets and variables → Actions → Variables задать `SUPABASE_URL` и `SUPABASE_ANON_KEY`.
