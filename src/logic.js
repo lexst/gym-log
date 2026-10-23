@@ -34,6 +34,24 @@ export function fmtClock(ms) {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 }
 
+// Stretch interval pattern "30-10-30-10-30" -> [30, 10, 30, 10, 30] seconds.
+// Even positions are stretching, odd ones rest.
+export function parsePattern(text) {
+  const out = String(text || '').split(/[^0-9]+/).filter(Boolean).map(Number).filter((n) => n > 0);
+  return out.length ? out : null;
+}
+
+// Where an interval run is after ms: phase index and ms left in it.
+export function phaseAt(pattern, ms) {
+  let t = Math.max(0, ms);
+  for (let i = 0; i < pattern.length; i++) {
+    const len = pattern[i] * 1000;
+    if (t < len) return { i, left: len - t, done: false };
+    t -= len;
+  }
+  return { i: pattern.length - 1, left: 0, done: true };
+}
+
 // Warm-up set is about half the working weight, rounded down
 // (65 -> 30, 120 -> 60). Light weights round down to whole kilos.
 export function warmupWeight(w) {

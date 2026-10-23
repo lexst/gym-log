@@ -257,3 +257,15 @@ button.card:active { background: var(--card2); }
 .steps { margin: 10px 0 0; padding-left: 20px; }
 .steps li { margin: 3px 0; }
 a.btn { text-align: center; text-decoration: none; color: inherit; }
+.stretch-start { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; }
+.row .btn.stretch-go { flex: 0 0 auto; width: auto; margin: 0; padding: 9px 18px; }
+.stretch-add { flex-wrap: nowrap; }
+.card.row .link.danger { margin-left: 10px; font-size: 16px; }
+.stretch-run { text-align: center; padding: 22px 16px; }
+.stretch-phase { font-size: 22px; font-weight: 700; margin-top: 6px; color: var(--accent); }
+.stretch-time { font-size: 96px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stretch-run .timer-bar { margin: 10px 0 8px; }
+.stretch-run.rest .stretch-phase, .stretch-run.rest .stretch-time { color: var(--blue); }
+.stretch-run.rest .timer-bar i { background: var(--blue); }
+.stretch-run.done .stretch-phase, .stretch-run.done .stretch-time { color: var(--good); }
+.stretch-run.done .timer-bar i { background: var(--good); }
