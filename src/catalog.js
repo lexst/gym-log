@@ -82,10 +82,31 @@ const TAG3 = [
   it('cat-schulterdruecken-mit-kh', 2, 6, 8, 2),
 ];
 
+// Tag 1 as in seed.js; only needed to log older sessions.
+const TAG1 = [
+  it('ex-beinpresse', 2, 6, 8, 5),
+  it('ex-beinstrecker', 2, 8, 10, 2.5),
+  it('ex-rdl', 2, 6, 8, 2.5),
+  it('ex-rudern', 2, 8, 10, 2.5),
+  it('ex-brustpresse', 2, 6, 8, 2.5),
+  it('ex-seitheben', 2, 8, 10, 1, false),
+];
+
 // [dayId, planned items, logged session]
 export const NOTION_DAYS = [
   ['day-2', TAG2, logged('w-2026-10-15-tag2', 'day-2', '2026-10-15', TAG2,
     [[125, [10, 10, 8]], [120, [8, 8]], [45, [6, 6]], [40, [9, 8]], [20, [9, 9]], [35, [6, null]], [8, [8, 8], { L: [8, 8], R: [8, 8] }]])],
   ['day-3', TAG3, logged('w-2026-10-17-tag3', 'day-3', '2026-10-17', TAG3,
     [[130, [10, 9]], [65, [10, 9]], [45, [7, 6]], [25, [9, 8, null]], [50, [9, 8]], [20, [8, 6]]])],
+];
+
+// Older sessions from Notion screenshots (27.09, 04.10, 07.10.26). The third
+// set of 3-set exercises was off screen, so it stays empty.
+export const NOTION_OLDER = [
+  logged('w-2026-09-27-tag2', 'day-2', '2026-09-27', TAG2,
+    [[125, [10, 10, null]], [120, [7, 7]], [45, [6, 6]], [40, [8, 8]], [20, [9, 8]], [30, [10, 10]], [8, [8, 8], { L: [8, 8], R: [8, 8] }]]),
+  logged('w-2026-10-04-tag3', 'day-3', '2026-10-04', TAG3,
+    [[125, [10, 10]], [65, [9, 9]], [45, [7, 6]], [25, [8, 8, null]], [50, [9, 8]], [20, [7, 6]]]),
+  logged('w-2026-10-07-tag1', 'day-1', '2026-10-07', TAG1,
+    [[120, [6, 8]], [65, [8, 8]], [55, [6, 6]], [50, [9, 8]], [45, [6, 5]], [12, [8, 8]]]),
 ];
