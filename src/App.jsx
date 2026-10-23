@@ -563,8 +563,10 @@ const savePrefs = (p) => {
     localStorage.setItem(PREFS_KEY, JSON.stringify(p));
   } catch {}
 };
-const shortcutUrl = (name, sec) =>
-  `shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${sec}`;
+// iOS does not pass input from a web app to a Shortcut, so there is one
+// Shortcut per duration with the time set inside: "Pause 90", "Pause 180".
+const shortcutName = (prefix, sec) => `${prefix} ${sec}`;
+const shortcutUrl = (prefix, sec) => `shortcuts://run-shortcut?name=${encodeURIComponent(shortcutName(prefix, sec))}`;
 
 let audio;
 function unlockAudio() {
@@ -1223,16 +1225,19 @@ function TimerSettings() {
       {p.shortcut && (
         <>
           <div className="field">
-            <label>Name des Kurzbefehls</label>
+            <label>Name der Kurzbefehle (ohne Sekunden)</label>
             <input className="text" value={name} onChange={(e) => set({ shortcutName: e.target.value })} />
           </div>
           <ol className="small muted steps">
             <li>App „Kurzbefehle“ öffnen → „+“.</li>
-            <li>Aktion „Timer starten“ hinzufügen.</li>
-            <li>Bei der Dauer die Variable „Kurzbefehleingabe“ wählen, Einheit „Sekunden“.</li>
-            <li>Den Kurzbefehl „{name}“ nennen.</li>
+            <li>Aktion „Timer starten“ hinzufügen, Dauer 90 Sekunden.</li>
+            <li>Den Kurzbefehl „{shortcutName(name, 90)}“ nennen.</li>
+            <li>Genauso „{shortcutName(name, 180)}“ mit 180 Sekunden (3 Minuten).</li>
           </ol>
-          <a className="btn" href={shortcutUrl(name, 10)}>Testen (10 Sekunden)</a>
+          <div className="row gap">
+            <a className="btn" href={shortcutUrl(name, 90)}>Test 1:30</a>
+            <a className="btn" href={shortcutUrl(name, 180)}>Test 3:00</a>
+          </div>
         </>
       )}
     </section>
