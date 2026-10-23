@@ -61,3 +61,16 @@ test('top of the range is reached only when every set hits it', () => {
   assert.equal(topReached({ sets: 2, repMax: 10, reps: [10, null] }), false);
   assert.equal(topReached({ sets: 2, repMax: null, reps: [10, 10] }), false);
 });
+
+test('an exercise is compared with the same training day only', () => {
+  const ws = [
+    { id: 'a', dayId: 'd1', date: '2026-10-01', finished: true, entries: [{ exId: 'x', weight: 50, reps: [10, 10] }] },
+    { id: 'b', dayId: 'd2', date: '2026-10-03', finished: true, entries: [{ exId: 'x', weight: 45, reps: [8, 8] }] },
+    { id: 'c', dayId: 'd1', date: '2026-10-05', finished: true, entries: [{ exId: 'x', weight: 50, reps: [10, 9] }] },
+  ];
+  assert.equal(previous(ws, 'x', ws[2]).workoutId, 'a');
+  assert.equal(previous(ws, 'x', ws[1]), null);
+  assert.equal(previous(ws, 'x', { id: 'n', date: '2026-10-07', dayId: 'd2' }).workoutId, 'b');
+  assert.equal(isPr(ws, ws[1].entries[0], ws[1]), false);
+  assert.equal(previous(ws, 'x', { date: '2026-10-07' }).workoutId, 'c');
+});

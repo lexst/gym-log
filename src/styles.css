@@ -154,7 +154,7 @@ button.card:active { background: var(--card2); }
 .res.same { background: var(--card2); color: var(--muted); }
 .res.down { background: color-mix(in srgb, var(--bad) 20%, transparent); color: var(--bad); }
 .res.down.soft { background: var(--card2); color: var(--muted); }
-.res.top { width: 28px; background: var(--good); color: #fff; font-size: 15px; }
+.res.reached { width: 28px; background: var(--good); color: #fff; font-size: 15px; }
 .res.new { background: var(--card2); color: var(--blue); }
 .pr { font-size: 11px; font-weight: 800; padding: 3px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
 

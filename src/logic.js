@@ -61,11 +61,13 @@ export function bestE1rm(entry) {
   return Math.max(0, ...doneReps(entry).map((r) => e1rm(entry.weight, r)));
 }
 
-// All finished sessions of one exercise, oldest first.
-export function history(workouts, exId) {
+// All finished sessions of one exercise, oldest first. With dayId, only
+// sessions of that training day: reps depend on what came before the
+// exercise, so Tag 1 is compared with Tag 1 only.
+export function history(workouts, exId, dayId) {
   const out = [];
   for (const w of workouts) {
-    if (!w.finished) continue;
+    if (!w.finished || (dayId && w.dayId !== dayId)) continue;
     for (const entry of w.entries || []) {
       if (entry.exId === exId && hasData(entry)) out.push({ date: w.date, workoutId: w.id, entry });
     }
@@ -75,7 +77,7 @@ export function history(workouts, exId) {
 
 // Most recent session of an exercise before a given workout (by date).
 export function previous(workouts, exId, current) {
-  const h = history(workouts, exId).filter(
+  const h = history(workouts, exId, current?.dayId).filter(
     (x) => x.workoutId !== current?.id && (!current?.date || x.date <= current.date),
   );
   return h.length ? h[h.length - 1] : null;
@@ -112,7 +114,7 @@ export function compare(entry, prev) {
 // A personal record beats the best estimated 1RM of all earlier sessions.
 export function isPr(workouts, entry, workout) {
   if (!hasData(entry)) return false;
-  const earlier = history(workouts, entry.exId).filter(
+  const earlier = history(workouts, entry.exId, workout.dayId).filter(
     (x) => x.workoutId !== workout.id && x.date <= workout.date,
   );
   if (!earlier.length) return false;
