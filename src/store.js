@@ -3,7 +3,7 @@
 // remote ones by last-write-wins on updatedAt.
 import { useSyncExternalStore } from 'react';
 import { seedDocs } from './seed.js';
-import { CATALOG, SEED_FIXES, slug } from './catalog.js';
+import { CATALOG, SEED_FIXES, slug, TAG2_EXTRA_EXERCISES, TAG2_ITEMS, TAG2_WORKOUT } from './catalog.js';
 
 const KEY = 'gymlog:v1';
 const listeners = new Set();
@@ -88,23 +88,31 @@ export function ensureSeed() {
 // Adds the plan's exercise catalog once. Fixes to seeded exercises get
 // updatedAt + 1, so a newer synced edit of the same doc still wins.
 export function ensureCatalog() {
-  if ((state.catalog || 0) >= 1) return;
-  for (const [id, old, next] of SEED_FIXES) {
-    const d = state.docs.exercise?.[id];
-    if (!d || d.deleted) continue;
-    const patch = {};
-    for (const k of Object.keys(old)) if (d[k] === old[k]) patch[k] = next[k];
-    if (Object.keys(patch).length) write('exercise', { ...d, ...patch }, (d.updatedAt || 0) + 1);
-  }
-  const names = new Set(all('exercise').map((e) => e.name.toLowerCase()));
-  for (const [group, list] of CATALOG) {
-    for (const name of list) {
-      const id = 'cat-' + slug(name);
-      if (state.docs.exercise?.[id] || names.has(name.toLowerCase())) continue;
-      write('exercise', { id, name, group }, 1);
+  const v = state.catalog || 0;
+  if (v >= 2) return;
+  if (v < 1) {
+    for (const [id, old, next] of SEED_FIXES) {
+      const d = state.docs.exercise?.[id];
+      if (!d || d.deleted) continue;
+      const patch = {};
+      for (const k of Object.keys(old)) if (d[k] === old[k]) patch[k] = next[k];
+      if (Object.keys(patch).length) write('exercise', { ...d, ...patch }, (d.updatedAt || 0) + 1);
+    }
+    const names = new Set(all('exercise').map((e) => e.name.toLowerCase()));
+    for (const [group, list] of CATALOG) {
+      for (const name of list) {
+        const id = 'cat-' + slug(name);
+        if (state.docs.exercise?.[id] || names.has(name.toLowerCase())) continue;
+        write('exercise', { id, name, group }, 1);
+      }
     }
   }
-  state.catalog = 1;
+  // Tag 2 from Notion: fill the day only if it is still empty.
+  for (const e of TAG2_EXTRA_EXERCISES) if (!state.docs.exercise?.[e.id]) write('exercise', e, 1);
+  const d2 = state.docs.day?.['day-2'];
+  if (d2 && !d2.deleted && !d2.items.length) write('day', { ...d2, items: TAG2_ITEMS }, (d2.updatedAt || 0) + 1);
+  if (!state.docs.workout?.[TAG2_WORKOUT.id]) write('workout', TAG2_WORKOUT, 1);
+  state.catalog = 2;
   emit();
 }
 

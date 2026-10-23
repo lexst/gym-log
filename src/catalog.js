@@ -45,3 +45,27 @@ export function slug(s) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 }
+
+// Tag 2 as logged in Notion on 15.10.26.
+const t2 = (exId, sets, repMin, repMax, step, warmup = true) => ({ exId, sets, repMin, repMax, step, warmup });
+export const TAG2_EXTRA_EXERCISES = [{ id: 'ex-reverse-flys-sz', name: 'Reverse Flys SZ', group: 'Schulter hinten isoliert' }];
+export const TAG2_ITEMS = [
+  t2('cat-hipthrust-maschine', 3, 8, 10, 5),
+  t2('ex-beinpresse', 2, 6, 8, 5),
+  t2('cat-beinbeuger-sitzend', 2, 8, 10, 2.5),
+  t2('cat-latzug-maschine-og', 2, 8, 10, 2.5),
+  t2('cat-schulterdruecken-mit-kh', 2, 6, 8, 2),
+  t2('ex-reverse-flys-sz', 2, 8, 10, 2.5, false),
+];
+const logged2 = [[125, [10, 10, 8]], [120, [8, 8]], [45, [6, 6]], [40, [9, 8]], [20, [9, 9]], [35, [6, null]]];
+export const TAG2_WORKOUT = {
+  id: 'w-2026-10-15-tag2',
+  dayId: 'day-2',
+  date: '2026-10-15',
+  finished: true,
+  note: '',
+  entries: TAG2_ITEMS.map((it, i) => ({
+    exId: it.exId, sets: it.sets, repMin: it.repMin, repMax: it.repMax, step: it.step,
+    weight: logged2[i][0], reps: logged2[i][1], warmup: null, note: '',
+  })),
+};
