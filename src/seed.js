@@ -1,5 +1,5 @@
 // Starting program taken from the Notion log (Tag 1, 22.10.26).
-// Names cut off in the screenshots are best guesses; edit them in «Программа».
+// Names cut off in the screenshots are best guesses; edit them in "Plan".
 
 const ex = (id, name, group) => ({ id, name, group });
 const item = (exId, sets, repMin, repMax, step = 2.5) => ({ exId, sets, repMin, repMax, warmup: true, step });

@@ -1,6 +1,6 @@
 {
-  "name": "Дневник тренировок",
-  "short_name": "Тренировки",
+  "name": "Trainingstagebuch",
+  "short_name": "Training",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
