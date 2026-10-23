@@ -12,12 +12,16 @@ test('slug handles umlauts', () => {
   assert.equal(slug('Trizepsdrücken überkopf'), 'trizepsdruecken-ueberkopf');
 });
 
-test('Tag 2 refers to catalog exercises', async () => {
-  const { TAG2_ITEMS, TAG2_EXTRA_EXERCISES } = await import('./catalog.js');
+test('Notion days refer to known exercises', async () => {
+  const { NOTION_DAYS, NOTION_EXTRA_EXERCISES } = await import('./catalog.js');
   const ids = new Set([
     ...CATALOG.flatMap(([, list]) => list.map((n) => 'cat-' + slug(n))),
-    ...TAG2_EXTRA_EXERCISES.map((e) => e.id),
+    ...NOTION_EXTRA_EXERCISES.map((e) => e.id),
     'ex-beinpresse',
+    'ex-beinstrecker',
   ]);
-  for (const it of TAG2_ITEMS) assert.ok(ids.has(it.exId), it.exId);
+  for (const [, items, w] of NOTION_DAYS) {
+    for (const t of items) assert.ok(ids.has(t.exId), t.exId);
+    assert.equal(w.entries.length, items.length);
+  }
 });

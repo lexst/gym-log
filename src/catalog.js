@@ -46,26 +46,41 @@ export function slug(s) {
     .replace(/^-|-$/g, '');
 }
 
-// Tag 2 as logged in Notion on 15.10.26.
-const t2 = (exId, sets, repMin, repMax, step, warmup = true) => ({ exId, sets, repMin, repMax, step, warmup });
-export const TAG2_EXTRA_EXERCISES = [{ id: 'ex-reverse-flys-sz', name: 'Reverse Flys SZ', group: 'Schulter hinten isoliert' }];
-export const TAG2_ITEMS = [
-  t2('cat-hipthrust-maschine', 3, 8, 10, 5),
-  t2('ex-beinpresse', 2, 6, 8, 5),
-  t2('cat-beinbeuger-sitzend', 2, 8, 10, 2.5),
-  t2('cat-latzug-maschine-og', 2, 8, 10, 2.5),
-  t2('cat-schulterdruecken-mit-kh', 2, 6, 8, 2),
-  t2('ex-reverse-flys-sz', 2, 8, 10, 2.5, false),
+// Tag 2 and Tag 3 as logged in Notion (15.10.26 and 17.10.26).
+const it = (exId, sets, repMin, repMax, step, warmup = true) => ({ exId, sets, repMin, repMax, step, warmup });
+export const NOTION_EXTRA_EXERCISES = [{ id: 'ex-reverse-flys-sz', name: 'Reverse Flys SZ', group: 'Schulter hinten isoliert' }];
+
+function logged(id, dayId, date, items, results) {
+  return {
+    id, dayId, date, finished: true, note: '',
+    entries: items.map((t, i) => ({
+      exId: t.exId, sets: t.sets, repMin: t.repMin, repMax: t.repMax, step: t.step,
+      weight: results[i][0], reps: results[i][1], warmup: null, note: '',
+    })),
+  };
+}
+
+const TAG2 = [
+  it('cat-hipthrust-maschine', 3, 8, 10, 5),
+  it('ex-beinpresse', 2, 6, 8, 5),
+  it('cat-beinbeuger-sitzend', 2, 8, 10, 2.5),
+  it('cat-latzug-maschine-og', 2, 8, 10, 2.5),
+  it('cat-schulterdruecken-mit-kh', 2, 6, 8, 2),
+  it('ex-reverse-flys-sz', 2, 8, 10, 2.5, false),
 ];
-const logged2 = [[125, [10, 10, 8]], [120, [8, 8]], [45, [6, 6]], [40, [9, 8]], [20, [9, 9]], [35, [6, null]]];
-export const TAG2_WORKOUT = {
-  id: 'w-2026-10-15-tag2',
-  dayId: 'day-2',
-  date: '2026-10-15',
-  finished: true,
-  note: '',
-  entries: TAG2_ITEMS.map((it, i) => ({
-    exId: it.exId, sets: it.sets, repMin: it.repMin, repMax: it.repMax, step: it.step,
-    weight: logged2[i][0], reps: logged2[i][1], warmup: null, note: '',
-  })),
-};
+const TAG3 = [
+  it('cat-hipthrust-maschine', 2, 8, 10, 5),
+  it('ex-beinstrecker', 2, 8, 10, 2.5),
+  it('cat-beinbeuger-sitzend', 2, 8, 10, 2.5),
+  it('cat-bankdruecken-mit-lh', 3, 6, 8, 2.5),
+  it('cat-ruderzugmaschine-zur-brust-oberer-ruecken', 2, 8, 10, 2.5),
+  it('cat-schulterdruecken-mit-kh', 2, 6, 8, 2),
+];
+
+// [dayId, planned items, logged session]
+export const NOTION_DAYS = [
+  ['day-2', TAG2, logged('w-2026-10-15-tag2', 'day-2', '2026-10-15', TAG2,
+    [[125, [10, 10, 8]], [120, [8, 8]], [45, [6, 6]], [40, [9, 8]], [20, [9, 9]], [35, [6, null]]])],
+  ['day-3', TAG3, logged('w-2026-10-17-tag3', 'day-3', '2026-10-17', TAG3,
+    [[130, [10, 9]], [65, [10, 9]], [45, [7, 6]], [25, [9, 8, null]], [50, [9, 8]], [20, [8, 6]]])],
+];
