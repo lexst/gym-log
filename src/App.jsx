@@ -563,8 +563,23 @@ const savePrefs = (p) => {
     localStorage.setItem(PREFS_KEY, JSON.stringify(p));
   } catch {}
 };
-const shortcutUrl = (name, sec) =>
-  `shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${sec}`;
+// iOS does not pass URL input from a web app to a Shortcut. Either the
+// seconds go through the clipboard to one Shortcut ("Pause"), or there is
+// one Shortcut per duration with the time set inside ("Pause 90").
+const shortcutName = (prefix, sec) => `${prefix} ${sec}`;
+const runUrl = (name) => `shortcuts://run-shortcut?name=${encodeURIComponent(name)}`;
+function runShortcut(prefs, sec) {
+  const prefix = prefs.shortcutName || 'Pause';
+  if (prefs.shortcutMode === 'fixed') {
+    window.location.href = runUrl(shortcutName(prefix, sec));
+    return;
+  }
+  // Start the write inside the tap, then switch apps right away.
+  try {
+    navigator.clipboard?.writeText(String(sec)).catch(() => {});
+  } catch {}
+  window.location.href = runUrl(prefix);
+}
 
 let audio;
 function unlockAudio() {
@@ -616,7 +631,7 @@ function RestTimer() {
     unlockAudio();
     update({ start: Date.now(), target: sec * 1000 });
     const prefs = loadPrefs();
-    if (prefs.shortcut) window.location.href = shortcutUrl(prefs.shortcutName || 'Pause', sec);
+    if (prefs.shortcut) runShortcut(prefs, sec);
   };
 
   if (!t) {
@@ -1213,6 +1228,7 @@ function TimerSettings() {
     setP(next);
   };
   const name = p.shortcutName || 'Pause';
+  const fixed = p.shortcutMode === 'fixed';
   return (
     <section className="card">
       <h2>Pause-Timer</h2>
@@ -1222,17 +1238,40 @@ function TimerSettings() {
       </label>
       {p.shortcut && (
         <>
+          <div className="chips">
+            <button className={'chip-btn' + (fixed ? '' : ' on')} onClick={() => set({ shortcutMode: 'clipboard' })}>Ein Kurzbefehl</button>
+            <button className={'chip-btn' + (fixed ? ' on' : '')} onClick={() => set({ shortcutMode: 'fixed' })}>Zwei Kurzbefehle</button>
+          </div>
           <div className="field">
-            <label>Name des Kurzbefehls</label>
+            <label>Name des Kurzbefehls{fixed ? ' (ohne Sekunden)' : ''}</label>
             <input className="text" value={name} onChange={(e) => set({ shortcutName: e.target.value })} />
           </div>
-          <ol className="small muted steps">
-            <li>App „Kurzbefehle“ öffnen → „+“.</li>
-            <li>Aktion „Timer starten“ hinzufügen.</li>
-            <li>Bei der Dauer die Variable „Kurzbefehleingabe“ wählen, Einheit „Sekunden“.</li>
-            <li>Den Kurzbefehl „{name}“ nennen.</li>
-          </ol>
-          <a className="btn" href={shortcutUrl(name, 10)}>Testen (10 Sekunden)</a>
+          {fixed ? (
+            <ol className="small muted steps">
+              <li>App „Kurzbefehle“ öffnen → „+“.</li>
+              <li>Aktion „Timer starten“ hinzufügen, Dauer 90 Sekunden.</li>
+              <li>Den Kurzbefehl „{shortcutName(name, 90)}“ nennen.</li>
+              <li>Genauso „{shortcutName(name, 180)}“ mit 180 Sekunden (3 Minuten).</li>
+            </ol>
+          ) : (
+            <ol className="small muted steps">
+              <li>App „Kurzbefehle“ öffnen → „+“.</li>
+              <li>Aktion „Zwischenablage abrufen“.</li>
+              <li>Aktion „Zahlen aus Zwischenablage abrufen“.</li>
+              <li>Aktion „Timer starten“: Dauer „Zahlen“, Einheit „Sekunden“.</li>
+              <li>Den Kurzbefehl „{name}“ nennen. Die Pausenzeit wird dafür in die Zwischenablage kopiert.</li>
+            </ol>
+          )}
+          <div className="row gap">
+            {fixed ? (
+              <>
+                <button className="btn" onClick={() => runShortcut(p, 90)}>Test 1:30</button>
+                <button className="btn" onClick={() => runShortcut(p, 180)}>Test 3:00</button>
+              </>
+            ) : (
+              <button className="btn" onClick={() => runShortcut(p, 10)}>Testen (10 Sekunden)</button>
+            )}
+          </div>
         </>
       )}
     </section>
