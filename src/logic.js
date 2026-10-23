@@ -81,14 +81,18 @@ export function previous(workouts, exId, current) {
   return h.length ? h[h.length - 1] : null;
 }
 
+// Every working set reached the top of the rep range.
+export function topReached(entry) {
+  const reps = doneReps(entry);
+  const sets = entry.sets || entry.reps?.length || 0;
+  return !!entry.repMax && reps.length > 0 && reps.length >= sets && reps.every((r) => r >= entry.repMax);
+}
+
 // Double progression: once every working set reached the top of the
 // rep range, suggest adding one weight step.
 export function suggest(target, last, step = 2.5) {
   if (!last) return null;
-  const reps = doneReps(last);
-  const sets = target.sets || reps.length;
-  const top = target.repMax;
-  if (top && reps.length >= sets && reps.every((r) => r >= top)) {
+  if (topReached({ ...last, sets: target.sets || last.reps?.length, repMax: target.repMax })) {
     return { weight: last.weight + step, up: true };
   }
   return { weight: last.weight, up: false };

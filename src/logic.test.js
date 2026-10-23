@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides } from './logic.js';
+import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides, topReached } from './logic.js';
 
 test('warm-up is half the weight, rounded down', () => {
   assert.equal(warmupWeight(65), 30);
@@ -53,4 +53,11 @@ test('one-sided sets count the weaker side', () => {
   assert.equal(combineSides(null, 9), 9);
   assert.equal(combineSides(10, null), 10);
   assert.equal(combineSides(null, null), null);
+});
+
+test('top of the range is reached only when every set hits it', () => {
+  assert.equal(topReached({ sets: 2, repMax: 10, reps: [10, 11] }), true);
+  assert.equal(topReached({ sets: 2, repMax: 10, reps: [10, 9] }), false);
+  assert.equal(topReached({ sets: 2, repMax: 10, reps: [10, null] }), false);
+  assert.equal(topReached({ sets: 2, repMax: null, reps: [10, 10] }), false);
 });
