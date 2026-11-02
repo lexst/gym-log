@@ -34,6 +34,31 @@ export function fmtClock(ms) {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 }
 
+// Exercises done in another order than planned (machine busy). planPos is
+// the planned place, saved when an exercise is first moved. Returns
+// entry index -> { now, plan } (1-based) for the ones that moved.
+export function moved(entries) {
+  const planned = (entries || []).map((e, i) => ({ e, i })).filter((x) => x.e.planPos != null);
+  const byPlan = [...planned].sort((a, b) => a.e.planPos - b.e.planPos);
+  const out = {};
+  planned.forEach((x, now) => {
+    const plan = byPlan.indexOf(x);
+    if (plan !== now) out[x.i] = { now: x.i + 1, plan: plan + 1 };
+  });
+  return out;
+}
+
+// Swap entry i with its neighbour (d = -1 up, +1 down), recording the
+// planned order first so the change can be shown later.
+export function moveEntry(entries, i, d) {
+  const j = i + d;
+  if (j < 0 || j >= entries.length) return entries;
+  const known = entries.some((e) => e.planPos != null);
+  const out = entries.map((e, k) => (known || e.extra ? e : { ...e, planPos: k }));
+  [out[i], out[j]] = [out[j], out[i]];
+  return out;
+}
+
 // Stretch interval pattern "30-10-30-10-30" -> [30, 10, 30, 10, 30] seconds.
 // Even positions are stretching, odd ones rest.
 export function parsePattern(text) {

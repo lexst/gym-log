@@ -269,3 +269,4 @@ a.btn { text-align: center; text-decoration: none; color: inherit; }
 .stretch-run.rest .timer-bar i { background: var(--blue); }
 .stretch-run.done .stretch-phase, .stretch-run.done .stretch-time { color: var(--good); }
 .stretch-run.done .timer-bar i { background: var(--good); }
+.moved { color: var(--blue); }
