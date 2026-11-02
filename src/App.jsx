@@ -43,6 +43,14 @@ function targetText(t) {
   return `${t.sets}×${t.repMin}${t.repMax && t.repMax !== t.repMin ? '–' + t.repMax : ''}`;
 }
 
+// Dumbbell rack steps: set per exercise, on by default for "... mit KH".
+const isDumbbell = (exId) => {
+  const e = store.get('exercise', exId);
+  if (!e) return false;
+  return e.dumbbells ?? /\bKH\b|Kurzhantel/i.test(e.name);
+};
+const progOpts = (exId) => ({ dumbbells: isDumbbell(exId), hold: store.get('exercise', exId)?.hold ?? null });
+
 const firstText = (ws, exId, wid) => (L.history(ws, exId).some((x) => x.workoutId !== wid) ? 'Erstes Mal an diesem Tag' : 'Erstes Mal');
 
 // What the next session of a planned exercise starts with. Compared with
@@ -50,9 +58,9 @@ const firstText = (ws, exId, wid) => (L.history(ws, exId).some((x) => x.workoutI
 // any day as a starting point.
 function plannedStart(it, ws, dayId) {
   const prev = L.previous(ws, it.exId, { date: '9999-12-31', dayId });
-  const sug = L.suggest(it, prev?.entry, it.step);
+  const sug = L.suggest(it, prev?.entry, it.step, progOpts(it.exId));
   const any = prev || L.previous(ws, it.exId, { date: '9999-12-31' });
-  return { prev, weight: sug?.weight ?? any?.entry.weight ?? null, up: !!sug?.up };
+  return { prev, weight: sug?.weight ?? any?.entry.weight ?? null, up: !!sug?.up, held: !!sug?.held };
 }
 
 function startWorkout(day) {
@@ -107,13 +115,13 @@ function NumField({ value, onChange, placeholder, className = '', ariaLabel }) {
   );
 }
 
-function Stepper({ value, onChange, step = 2.5, placeholder, ariaLabel }) {
-  const bump = (d) => onChange(Math.max(0, Math.round(((value || 0) + d) * 100) / 100));
+function Stepper({ value, onChange, step = 2.5, dumbbells = false, placeholder, ariaLabel }) {
+  const bump = (d) => onChange(L.nextWeight(value, d, step, dumbbells));
   return (
     <div className="stepper">
-      <button type="button" onClick={() => bump(-step)} aria-label="Weniger">−</button>
+      <button type="button" onClick={() => bump(-1)} aria-label="Weniger">−</button>
       <NumField value={value} onChange={onChange} placeholder={placeholder} ariaLabel={ariaLabel} />
-      <button type="button" onClick={() => bump(step)} aria-label="Mehr">+</button>
+      <button type="button" onClick={() => bump(1)} aria-label="Mehr">+</button>
     </div>
   );
 }
@@ -213,7 +221,7 @@ function DayPreview({ dayId, back, go, replace }) {
       <main className="pad">
         {!d.items.length && <p className="muted center">Noch keine Übungen für diesen Tag.</p>}
         {d.items.map((it, i) => {
-          const { prev, weight, up } = plannedStart(it, ws, d.id);
+          const { prev, weight, up, held } = plannedStart(it, ws, d.id);
           return (
             <section className="card preview" key={i}>
               <div className="muted small">{exGroup(it.exId)}</div>
@@ -228,7 +236,7 @@ function DayPreview({ dayId, back, go, replace }) {
               </div>
               {weight != null && (
                 <div className={'small ' + (up ? 'good' : '')}>
-                  Heute: {L.fmtNum(weight)} kg{up ? ' ↑' : ''}
+                  Heute: {L.fmtNum(weight)} kg{up ? ' ↑' : ''}{held ? ' · Gewicht halten, Wdh. steigern' : ''}
                   {it.warmup ? ` · Aufwärmen ${L.fmtNum(L.warmupWeight(weight))} kg` : ''}
                 </div>
               )}
@@ -259,7 +267,21 @@ function DayPreview({ dayId, back, go, replace }) {
 
 function EntryCard({ w, entry, index, update, removeEntry, move, ws }) {
   const prev = L.previous(ws, entry.exId, w)?.entry;
-  const sug = L.suggest(entry, prev, entry.step);
+  const sug = L.suggest(entry, prev, entry.step, progOpts(entry.exId));
+  const ex = store.get('exercise', entry.exId);
+  // Stay at the last weight and add reps; the hint stops until she lifts more.
+  const withWeight = (weight) => ({
+    weight,
+    warmup: entry.warmup && !entry.warmup.done ? { ...entry.warmup, weight: L.warmupWeight(weight) } : entry.warmup,
+  });
+  const hold = () => {
+    if (ex) store.put('exercise', { ...ex, hold: prev.weight });
+    set(withWeight(prev.weight));
+  };
+  const unhold = () => {
+    if (ex) store.put('exercise', { ...ex, hold: null });
+    set(withWeight(L.nextWeight(prev.weight, 1, entry.step, isDumbbell(entry.exId))));
+  };
   // Judge the result only once every set is logged, not halfway through.
   const r = w.finished || entry.reps.every((x) => x != null) ? L.compare(entry, prev) : null;
   const pr = w.finished && L.isPr(ws, entry, w);
@@ -313,17 +335,29 @@ function EntryCard({ w, entry, index, update, removeEntry, move, ws }) {
         )}
       </div>
       {sug?.up && entry.weight !== sug.weight && !w.finished && (
-        <button className="hint" onClick={() => set({ weight: sug.weight })}>
-          Letztes Mal oberes Ende erreicht – {L.fmtNum(sug.weight)} kg versuchen?
-        </button>
+        <div className="hint">
+          <button className="hint-main" onClick={() => set({ weight: sug.weight })}>
+            Letztes Mal oberes Ende erreicht – {L.fmtNum(sug.weight)} kg versuchen?
+          </button>
+          <button className="hint-alt" onClick={hold}>Nein, Wdh. steigern</button>
+        </div>
       )}
       {sug?.up && entry.weight === sug.weight && !L.hasData(entry) && (
-        <div className="hint ok">↑ Gewicht erhöht: letztes Mal oberes Ende erreicht</div>
+        <div className="hint ok">
+          ↑ Gewicht erhöht: letztes Mal oberes Ende erreicht
+          <button className="hint-alt" onClick={hold}>Lieber {L.fmtNum(prev.weight)} kg halten, Wdh. steigern</button>
+        </div>
+      )}
+      {sug?.held && !w.finished && (
+        <div className="hint held">
+          Gewicht {L.fmtNum(prev.weight)} kg gehalten – Wiederholungen steigern
+          <button className="hint-alt" onClick={unhold}>Doch erhöhen</button>
+        </div>
       )}
 
       <div className="field">
         <label>{entry.unilateral ? 'Gewicht je Seite, kg' : 'Gewicht, kg'}</label>
-        <Stepper value={entry.weight} step={entry.step || 2.5} onChange={(v) => set({ weight: v })} ariaLabel="Arbeitsgewicht" />
+        <Stepper value={entry.weight} step={entry.step || 2.5} dumbbells={isDumbbell(entry.exId)} onChange={(v) => set({ weight: v })} ariaLabel="Arbeitsgewicht" />
       </div>
 
       {entry.warmup && (
@@ -1153,6 +1187,14 @@ function ExercisesEditor({ back }) {
                 <label className="check">
                   <input type="checkbox" checked={!!e.unilateral} onChange={(ev) => store.put('exercise', { ...e, unilateral: ev.target.checked })} /> Links und rechts getrennt
                 </label>
+                <label className="check">
+                  <input type="checkbox" checked={isDumbbell(e.id)} onChange={(ev) => store.put('exercise', { ...e, dumbbells: ev.target.checked })} /> Kurzhanteln (bis 10 kg in 1-kg-Schritten, dann 2,5 kg)
+                </label>
+                {e.hold != null && (
+                  <label className="check">
+                    <input type="checkbox" checked onChange={() => store.put('exercise', { ...e, hold: null })} /> Gewicht {L.fmtNum(e.hold)} kg halten
+                  </label>
+                )}
               </section>
             ))}
           </div>

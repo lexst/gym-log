@@ -141,12 +141,24 @@ export function topReached(entry) {
 
 // Double progression: once every working set reached the top of the
 // rep range, suggest adding one weight step.
-export function suggest(target, last, step = 2.5) {
+// opts.dumbbells: the gym's dumbbells go 1 kg at a time up to 10 kg, then
+// 2.5 kg. opts.hold: she chose to stay at this weight and add reps instead.
+export function suggest(target, last, step = 2.5, opts = {}) {
   if (!last) return null;
   if (topReached({ ...last, sets: target.sets || last.reps?.length, repMax: target.repMax })) {
-    return { weight: last.weight + step, up: true };
+    if (opts.hold != null && opts.hold === last.weight) return { weight: last.weight, up: false, held: true };
+    return { weight: nextWeight(last.weight, 1, step, opts.dumbbells), up: true };
   }
   return { weight: last.weight, up: false };
+}
+
+// One step up (dir 1) or down (dir -1), on the dumbbell rack if dumbbells.
+export function nextWeight(w, dir, step = 2.5, dumbbells = false) {
+  const v = w || 0;
+  if (!dumbbells) return Math.max(0, Math.round((v + dir * step) * 100) / 100);
+  if (dir > 0) return v < 10 ? Math.floor(v) + 1 : (Math.floor(v / 2.5 + 1e-9) + 1) * 2.5;
+  if (v <= 10) return Math.max(0, Math.ceil(v) - 1);
+  return Math.max(10, (Math.ceil(v / 2.5 - 1e-9) - 1) * 2.5);
 }
 
 // Result vs. the previous session: 'up', 'same', 'down' or 'new'.
