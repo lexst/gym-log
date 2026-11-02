@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides, topReached, fmtClock, parsePattern, phaseAt, moved, moveEntry } from './logic.js';
+import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides, topReached, fmtClock, parsePattern, phaseAt, moved, moveEntry, nextWeight } from './logic.js';
 
 test('warm-up is half the weight, rounded down', () => {
   assert.equal(warmupWeight(65), 30);
@@ -103,4 +103,23 @@ test('exercises moved for one workout', () => {
   assert.equal(moveEntry(e, 0, -1), e);
   const x = moveEntry([...e, { exId: 'z', extra: true }], 0, 1);
   assert.equal(x[3].planPos, undefined);
+});
+
+test('dumbbell rack: 1 kg steps up to 10, then 2.5', () => {
+  assert.equal(nextWeight(20, 1, 2, true), 22.5);
+  assert.equal(nextWeight(22, 1, 2, true), 22.5);
+  assert.equal(nextWeight(9, 1, 2, true), 10);
+  assert.equal(nextWeight(10, 1, 2, true), 12.5);
+  assert.equal(nextWeight(22.5, -1, 2, true), 20);
+  assert.equal(nextWeight(12.5, -1, 2, true), 10);
+  assert.equal(nextWeight(10, -1, 2, true), 9);
+  assert.equal(nextWeight(20, 1, 2, false), 22);
+});
+
+test('holding a weight stops the increase hint', () => {
+  const t = { sets: 2, repMax: 8 };
+  const last = { weight: 20, reps: [8, 8] };
+  assert.deepEqual(suggest(t, last, 2, { dumbbells: true }), { weight: 22.5, up: true });
+  assert.deepEqual(suggest(t, last, 2, { dumbbells: true, hold: 20 }), { weight: 20, up: false, held: true });
+  assert.deepEqual(suggest(t, { weight: 22.5, reps: [8, 8] }, 2, { dumbbells: true, hold: 20 }), { weight: 25, up: true });
 });

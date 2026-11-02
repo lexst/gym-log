@@ -270,3 +270,6 @@ a.btn { text-align: center; text-decoration: none; color: inherit; }
 .stretch-run.done .stretch-phase, .stretch-run.done .stretch-time { color: var(--good); }
 .stretch-run.done .timer-bar i { background: var(--good); }
 .moved { color: var(--blue); }
+.hint .hint-main { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; color: inherit; font: inherit; }
+.hint-alt { display: block; margin-top: 6px; padding: 0; background: none; border: 0; color: var(--blue); font-size: 13px; text-align: left; }
+.hint.held { border-color: var(--line); background: var(--card2); color: var(--muted); }
