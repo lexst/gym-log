@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides, topReached, fmtClock, parsePattern, phaseAt } from './logic.js';
+import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides, topReached, fmtClock, parsePattern, phaseAt, moved, moveEntry } from './logic.js';
 
 test('warm-up is half the weight, rounded down', () => {
   assert.equal(warmupWeight(65), 30);
@@ -91,4 +91,16 @@ test('stretch intervals', () => {
   assert.deepEqual(phaseAt(p, 35000), { i: 1, left: 5000, done: false });
   assert.deepEqual(phaseAt(p, 40000), { i: 2, left: 30000, done: false });
   assert.equal(phaseAt(p, 70000).done, true);
+});
+
+test('exercises moved for one workout', () => {
+  const e = [{ exId: 'a' }, { exId: 'b' }, { exId: 'c' }];
+  assert.deepEqual(moved(e), {});
+  const m = moveEntry(e, 2, -1);
+  assert.deepEqual(m.map((x) => x.exId), ['a', 'c', 'b']);
+  assert.deepEqual(moved(m), { 1: { now: 2, plan: 3 }, 2: { now: 3, plan: 2 } });
+  assert.deepEqual(moved(moveEntry(m, 1, 1)), {});
+  assert.equal(moveEntry(e, 0, -1), e);
+  const x = moveEntry([...e, { exId: 'z', extra: true }], 0, 1);
+  assert.equal(x[3].planPos, undefined);
 });

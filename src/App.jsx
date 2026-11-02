@@ -257,7 +257,7 @@ function DayPreview({ dayId, back, go, replace }) {
 
 // --- workout ------------------------------------------------------------------
 
-function EntryCard({ w, entry, index, update, removeEntry, ws }) {
+function EntryCard({ w, entry, index, update, removeEntry, move, ws }) {
   const prev = L.previous(ws, entry.exId, w)?.entry;
   const sug = L.suggest(entry, prev, entry.step);
   // Judge the result only once every set is logged, not halfway through.
@@ -294,7 +294,10 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
     <section className="card entry">
       <div className="row between">
         <div>
-          <div className="muted small">{exGroup(entry.exId)}</div>
+          <div className="muted small">
+            {exGroup(entry.exId)}
+            {L.moved(w.entries)[index] && <span className="moved"> · als Nr. {index + 1} (Plan: {L.moved(w.entries)[index].plan})</span>}
+          </div>
           <div className="big">{exName(entry.exId)}</div>
         </div>
         <ResultBadge r={r} pr={pr} top={r && L.topReached(entry)} soft={w.pause} />
@@ -385,6 +388,8 @@ function EntryCard({ w, entry, index, update, removeEntry, ws }) {
             + Aufwärmen
           </button>
         )}
+        {index > 0 && <button className="link small" onClick={() => move(index, -1)} aria-label="Nach oben">↑ hoch</button>}
+        {index < w.entries.length - 1 && <button className="link small" onClick={() => move(index, 1)} aria-label="Nach unten">↓ runter</button>}
         {entry.extra && (
           <button className="link small danger" onClick={() => removeEntry(index)}>entfernen</button>
         )}
@@ -459,6 +464,8 @@ function Workout({ id, back }) {
     save({ entries });
   };
   const removeEntry = (i) => save({ entries: w.entries.filter((_, j) => j !== i) });
+  // Only this workout; the day's plan stays as it is.
+  const move = (i, d) => save({ entries: L.moveEntry(w.entries, i, d) });
   const addEntry = (exId) => {
     const prev = (L.previous(ws, exId, w) || L.previous(ws, exId, { date: w.date }))?.entry;
     save({
@@ -502,7 +509,7 @@ function Workout({ id, back }) {
       />
       <main className={'pad' + (w.finished ? '' : ' with-timer')}>
         {w.entries.map((e, i) => (
-          <EntryCard key={i} w={w} entry={e} index={i} update={update} removeEntry={removeEntry} ws={ws} />
+          <EntryCard key={`${e.exId}-${i}`} w={w} entry={e} index={i} update={update} removeEntry={removeEntry} move={move} ws={ws} />
         ))}
         <button className="btn ghost" onClick={() => setAdding(true)}>+ Übung</button>
         <textarea className="note big-note" rows={2} placeholder="Notiz zum Training" value={w.note || ''} onChange={(e) => save({ note: e.target.value })} />
@@ -847,11 +854,13 @@ function HistoryView({ go }) {
               <div className="big">{dayName(w.dayId)} · {L.fmtDate(w.date)}</div>
               {w.pause && <span className="chip">nach Pause</span>}
             </div>
-            {w.entries.filter(L.hasData).map((e, i) => {
+            {w.entries.map((e, i) => [e, i]).filter(([e]) => L.hasData(e)).map(([e, i]) => {
               const prev = L.previous(all, e.exId, w)?.entry;
+              const mv = L.moved(w.entries)[i];
               return (
                 <div key={i} className="hist-line small">
                   <span className="hist-name">{exName(e.exId)}</span>
+                  {mv && <span className="moved" title={`Plan: Nr. ${mv.plan}`}>Nr. {mv.now}</span>}
                   <span className="muted">{L.fmtNum(e.weight)}×{L.doneReps(e).join('/')}</span>
                   <ResultBadge r={L.compare(e, prev)} pr={L.isPr(all, e, w)} top={L.topReached(e)} soft={w.pause} />
                 </div>
@@ -974,14 +983,19 @@ function ExerciseProgress({ exId, back, go }) {
           </div>
         </div>
         <h2>Alle Trainings</h2>
-        {[...h].reverse().map((x, i, arr) => {
-          const prev = arr[i + 1]?.entry;
+        {[...h].reverse().map((x) => {
+          const wk = store.get('workout', x.workoutId);
+          const prev = L.previous(ws, exId, wk)?.entry;
+          const mv = wk && L.moved(wk.entries)[wk.entries.indexOf(x.entry)];
           return (
             <button key={x.workoutId} className="card hist" onClick={() => go('workout', { id: x.workoutId })}>
               <div className="hist-line">
-                <span className="hist-name">{L.fmtDate(x.date)} <span className="muted small">{dayName(store.get('workout', x.workoutId)?.dayId)}</span></span>
+                <span className="hist-name">
+                  {L.fmtDate(x.date)} <span className="muted small">{dayName(wk?.dayId)}</span>
+                  {mv && <span className="moved small"> · als Nr. {mv.now} (Plan: {mv.plan})</span>}
+                </span>
                 <span>{L.fmtNum(x.entry.weight)} kg × {L.doneReps(x.entry).join('/')}</span>
-                <ResultBadge r={L.compare(x.entry, prev)} top={L.topReached(x.entry)} soft={store.get('workout', x.workoutId)?.pause} />
+                <ResultBadge r={L.compare(x.entry, prev)} top={L.topReached(x.entry)} soft={wk?.pause} />
               </div>
               {x.entry.note && <div className="muted small hist-note">{x.entry.note}</div>}
             </button>
