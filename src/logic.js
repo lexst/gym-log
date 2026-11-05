@@ -132,6 +132,14 @@ export function previous(workouts, exId, current) {
   return h.length ? h[h.length - 1] : null;
 }
 
+// "Nächstes Mal erhöhen" may be ticked: top of the range in every set, or,
+// without a range, every set logged.
+export function canRaise(entry) {
+  if (entry?.repMax) return topReached(entry);
+  const sets = entry?.sets || entry?.reps?.length || 0;
+  return sets > 0 && doneReps(entry).length >= sets;
+}
+
 // Every working set reached the top of the rep range.
 export function topReached(entry) {
   const reps = doneReps(entry);
