@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides, topReached, fmtClock, parsePattern, phaseAt, moved, moveEntry, nextWeight } from './logic.js';
+import { warmupWeight, suggest, compare, isPr, nextDayId, parseNum, previous, combineSides, topReached, fmtClock, parsePattern, phaseAt, moved, moveEntry, nextWeight, canRaise } from './logic.js';
 
 test('warm-up is half the weight, rounded down', () => {
   assert.equal(warmupWeight(65), 30);
@@ -122,4 +122,11 @@ test('holding a weight stops the increase hint', () => {
   assert.deepEqual(suggest(t, last, 2, { dumbbells: true }), { weight: 22.5, up: true });
   assert.deepEqual(suggest(t, last, 2, { dumbbells: true, hold: 20 }), { weight: 20, up: false, held: true });
   assert.deepEqual(suggest(t, { weight: 22.5, reps: [8, 8] }, 2, { dumbbells: true, hold: 20 }), { weight: 25, up: true });
+});
+
+test('canRaise: top of range, or all sets logged without a range', () => {
+  assert.equal(canRaise({ repMin: 6, repMax: 8, sets: 2, reps: [8, 7] }), false);
+  assert.equal(canRaise({ repMin: 6, repMax: 8, sets: 2, reps: [8, 8] }), true);
+  assert.equal(canRaise({ sets: 2, reps: [10, null] }), false);
+  assert.equal(canRaise({ sets: 2, reps: [10, 10] }), true);
 });
