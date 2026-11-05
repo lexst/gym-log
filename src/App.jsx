@@ -695,17 +695,21 @@ function RestTimer() {
     saveTimer(next);
     setT(next);
   };
+  const prefs = loadPrefs();
   const start = (sec) => {
+    // With the iPhone timer on, it alone counts: no clock in the app.
+    if (prefs.shortcut) {
+      runShortcut(prefs, sec);
+      return;
+    }
     unlockAudio();
     update({ start: Date.now(), target: sec * 1000 });
-    const prefs = loadPrefs();
-    if (prefs.shortcut) runShortcut(prefs, sec);
   };
 
-  if (!t) {
+  if (!t || prefs.shortcut) {
     return (
       <div className="timer">
-        <span className="muted small">Pause</span>
+        <span className="muted small">{prefs.shortcut ? 'Pause · iPhone-Timer' : 'Pause'}</span>
         <button className="chip-btn" onClick={() => start(90)}>1:30</button>
         <button className="chip-btn" onClick={() => start(180)}>3:00</button>
       </div>
