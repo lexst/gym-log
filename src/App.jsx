@@ -56,17 +56,37 @@ const firstText = (ws, exId, wid) => (L.history(ws, exId).some((x) => x.workoutI
 // What the next session of a planned exercise starts with. Compared with
 // the same day only; the first time on a day, take the last weight from
 // any day as a starting point.
+// A note from last time on this day is shown as a reminder next time.
+function PrevNote({ text }) {
+  return (
+    <div className="prev-note small">
+      <span className="prev-note-label">Notiz vom letzten Mal</span>
+      {text.trim()}
+    </div>
+  );
+}
+
 function plannedStart(it, ws, dayId) {
   const prev = L.previous(ws, it.exId, { date: '9999-12-31', dayId });
-  const sug = L.suggest(it, prev?.entry, it.step, progOpts(it.exId));
+  const sug = upSuggestion(it.exId, prev?.entry, it.step) || L.suggest(it, prev?.entry, it.step, progOpts(it.exId));
   const any = prev || L.previous(ws, it.exId, { date: '9999-12-31' });
-  return { prev, weight: sug?.weight ?? any?.entry.weight ?? null, up: !!sug?.up, held: !!sug?.held };
+  return { prev, weight: sug?.weight ?? any?.entry.weight ?? null, up: !!sug?.up, held: !!sug?.held, marked: !!sug?.marked };
+}
+
+// "Nächstes Mal erhöhen" ticked last time: go up one step, unless she has
+// since chosen to hold that weight.
+function upSuggestion(exId, last, step) {
+  if (!last?.nextUp || last.weight == null) return null;
+  if (store.get('exercise', exId)?.hold === last.weight) return null;
+  return { weight: L.nextWeight(last.weight, 1, step || 2.5, isDumbbell(exId)), up: true, marked: true };
 }
 
 function startWorkout(day) {
   const ws = workouts();
   const entries = day.items.map((it) => {
-    const { weight } = plannedStart(it, ws, day.id);
+    const { weight, marked } = plannedStart(it, ws, day.id);
+    const ex = store.get('exercise', it.exId);
+    if (marked && ex?.hold != null) store.put('exercise', { ...ex, hold: null });
     return {
       exId: it.exId,
       unilateral: !!store.get('exercise', it.exId)?.unilateral,
@@ -221,7 +241,7 @@ function DayPreview({ dayId, back, go, replace }) {
       <main className="pad">
         {!d.items.length && <p className="muted center">Noch keine Übungen für diesen Tag.</p>}
         {d.items.map((it, i) => {
-          const { prev, weight, up, held } = plannedStart(it, ws, d.id);
+          const { prev, weight, up, held, marked } = plannedStart(it, ws, d.id);
           return (
             <section className="card preview" key={i}>
               <div className="muted small">{exGroup(it.exId)}</div>
@@ -234,9 +254,10 @@ function DayPreview({ dayId, back, go, replace }) {
                   ? `Letztes Mal ${L.fmtDate(prev.date, false)}: ${L.fmtNum(prev.entry.weight)} kg × ${L.doneReps(prev.entry).join('/')}`
                   : firstText(ws, it.exId)}
               </div>
+              {prev?.entry.note?.trim() && <PrevNote text={prev.entry.note} />}
               {weight != null && (
                 <div className={'small ' + (up ? 'good' : '')}>
-                  Heute: {L.fmtNum(weight)} kg{up ? ' ↑' : ''}{held ? ' · Gewicht halten, Wdh. steigern' : ''}
+                  Heute: {L.fmtNum(weight)} kg{up ? ' ↑' : ''}{marked ? ' · markiert' : ''}{held ? ' · Gewicht halten, Wdh. steigern' : ''}
                   {it.warmup ? ` · Aufwärmen ${L.fmtNum(L.warmupWeight(weight))} kg` : ''}
                 </div>
               )}
@@ -267,7 +288,8 @@ function DayPreview({ dayId, back, go, replace }) {
 
 function EntryCard({ w, entry, index, update, removeEntry, move, ws }) {
   const prev = L.previous(ws, entry.exId, w)?.entry;
-  const sug = L.suggest(entry, prev, entry.step, progOpts(entry.exId));
+  const sug = upSuggestion(entry.exId, prev, entry.step) || L.suggest(entry, prev, entry.step, progOpts(entry.exId));
+  const upWhy = sug?.marked ? 'Letztes Mal markiert: erhöhen' : 'Letztes Mal oberes Ende erreicht';
   const ex = store.get('exercise', entry.exId);
   // Stay at the last weight and add reps; the hint stops until she lifts more.
   const withWeight = (weight) => ({
@@ -334,17 +356,18 @@ function EntryCard({ w, entry, index, update, removeEntry, move, ws }) {
           <span className="muted">{firstText(ws, entry.exId, w.id)}</span>
         )}
       </div>
+      {prev?.note?.trim() && <PrevNote text={prev.note} />}
       {sug?.up && entry.weight !== sug.weight && !w.finished && (
         <div className="hint">
           <button className="hint-main" onClick={() => set({ weight: sug.weight })}>
-            Letztes Mal oberes Ende erreicht – {L.fmtNum(sug.weight)} kg versuchen?
+            {upWhy} – {L.fmtNum(sug.weight)} kg versuchen?
           </button>
           <button className="hint-alt" onClick={hold}>Nein, Wdh. steigern</button>
         </div>
       )}
       {sug?.up && entry.weight === sug.weight && !L.hasData(entry) && (
         <div className="hint ok">
-          ↑ Gewicht erhöht: letztes Mal oberes Ende erreicht
+          {sug.marked ? '↑ Gewicht erhöht, wie letztes Mal markiert' : '↑ Gewicht erhöht: letztes Mal oberes Ende erreicht'}
           <button className="hint-alt" onClick={hold}>Lieber {L.fmtNum(prev.weight)} kg halten, Wdh. steigern</button>
         </div>
       )}
@@ -431,10 +454,14 @@ function EntryCard({ w, entry, index, update, removeEntry, move, ws }) {
       <textarea
         className="note"
         rows={1}
-        placeholder="Notiz"
+        placeholder="Notiz – erscheint nächstes Mal"
         value={entry.note || ''}
         onChange={(e) => set({ note: e.target.value })}
       />
+      <label className="check next-up">
+        <input type="checkbox" checked={!!entry.nextUp} onChange={(e) => set({ nextUp: e.target.checked })} />
+        <span>Nächstes Mal erhöhen</span>
+      </label>
     </section>
   );
 }
