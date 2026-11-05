@@ -76,7 +76,7 @@ function plannedStart(it, ws, dayId) {
 // "Nächstes Mal erhöhen" ticked last time: go up one step, unless she has
 // since chosen to hold that weight.
 function upSuggestion(exId, last, step) {
-  if (!last?.nextUp || last.weight == null) return null;
+  if (!last?.nextUp || last.weight == null || !L.topReached(last)) return null;
   if (store.get('exercise', exId)?.hold === last.weight) return null;
   return { weight: L.nextWeight(last.weight, 1, step || 2.5, isDumbbell(exId)), up: true, marked: true };
 }
@@ -458,9 +458,17 @@ function EntryCard({ w, entry, index, update, removeEntry, move, ws }) {
         value={entry.note || ''}
         onChange={(e) => set({ note: e.target.value })}
       />
-      <label className="check next-up">
-        <input type="checkbox" checked={!!entry.nextUp} onChange={(e) => set({ nextUp: e.target.checked })} />
-        <span>Nächstes Mal erhöhen</span>
+      <label className={'check next-up' + (L.topReached(entry) ? '' : ' off')}>
+        <input
+          type="checkbox"
+          disabled={!L.topReached(entry)}
+          checked={!!entry.nextUp && L.topReached(entry)}
+          onChange={(e) => set({ nextUp: e.target.checked })}
+        />
+        <span>
+          Nächstes Mal erhöhen
+          {!L.topReached(entry) && <span className="muted small"> – erst, wenn alle Sätze oben sind</span>}
+        </span>
       </label>
     </section>
   );
