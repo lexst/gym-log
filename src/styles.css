@@ -281,3 +281,4 @@ a.btn { text-align: center; text-decoration: none; color: inherit; }
 }
 .prev-note-label { display: block; font-size: 12px; color: var(--accent); margin-bottom: 2px; }
 .check.next-up { margin-top: 8px; }
+.check.next-up.off { color: var(--muted); }
